@@ -1,0 +1,68 @@
+<script>
+    // Form progress tracking
+    const form = document.getElementById('deckingForm');
+    const progressFill = document.getElementById('progressFill');
+    const inputs = form.querySelectorAll("input, select, textarea");
+
+    function updateProgress() {
+        const requiredFields = Array.from(inputs).filter(i => i.hasAttribute("required"));
+        const filledFields = requiredFields.filter(i => i.value.trim() !== "" || i.checked);
+        const progress = (filledFields.length / requiredFields.length) * 100;
+        progressFill.style.width = `${progress}%`;
+    }
+
+    inputs.forEach(input => {
+        input.addEventListener("input", updateProgress);
+        input.addEventListener("change", updateProgress);
+    });
+
+    // Budget slider
+    const budgetSlider = document.getElementById('budget');
+    const budgetValue = document.getElementById('budgetValue');
+    const budgetValueHigh = document.getElementById('budgetValueHigh');
+
+    budgetSlider.addEventListener("input", () => {
+        const low = parseInt(budgetSlider.value).toLocaleString();
+        const high = (parseInt(budgetSlider.value) + 10000).toLocaleString();
+        budgetValue.textContent = low;
+        budgetValueHigh.textContent = high;
+    });
+
+    // File upload handling
+    const fileInput = document.getElementById('photos');
+    const fileList = document.getElementById('fileList');
+    let uploadedFiles = [];
+
+    function displayFile(file) {
+        const fileItem = document.createElement("div");
+        fileItem.classList.add("file-item");
+
+        const info = document.createElement("div");
+        info.innerHTML = `<span class="file-name">${file.name}</span> 
+                          <span class="file-size">(${(file.size / 1024 / 1024).toFixed(2)} MB)</span>`;
+
+        const removeBtn = document.createElement("button");
+        removeBtn.classList.add("remove-file");
+        removeBtn.textContent = "✕";
+        removeBtn.addEventListener("click", () => {
+            uploadedFiles = uploadedFiles.filter(f => f !== file);
+            fileItem.remove();
+        });
+
+        fileItem.appendChild(info);
+        fileItem.appendChild(removeBtn);
+        fileList.appendChild(fileItem);
+    }
+
+    fileInput.addEventListener("change", (e) => {
+        const files = Array.from(e.target.files);
+        files.forEach(file => {
+            if (file.size <= 10 * 1024 * 1024) { // 10MB limit
+                uploadedFiles.push(file);
+                displayFile(file);
+            } else {
+                alert(`File "${file.name}" is too large (max 10MB).`);
+            }
+        });
+    });
+</script>
