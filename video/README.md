@@ -68,3 +68,17 @@ npx remotion render TitleCard out/title-card.mp4 \
 The flag is unnecessary on a local machine, where the download works normally.
 Alternatively, add `remotion.media` (and `remotion.dev` for docs lookups) to the
 environment's allowed hosts.
+
+## The live-action opener plate
+
+`SceneOpener` expects a clip at `public/opener.mp4` — the live-action plate the
+hook text sits over. It is not committed; supply it before rendering `SaasAd`,
+or the render fails with a 404 for that file.
+
+The current plate was generated with Higgsfield (Seedance 2.0, 4s, 1080p, 16:9,
+silent). Downloading it inside a cloud session requires Higgsfield's CDN host to
+be added to the environment's allowed hosts; otherwise download it on a machine
+with open network access and drop it in `public/`.
+
+`trimBefore={18}` skips the first 0.6s of the plate so the shot is already
+moving when the ad starts. Adjust to taste.
