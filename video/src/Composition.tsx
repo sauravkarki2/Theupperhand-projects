@@ -1,17 +1,4 @@
-import { AbsoluteFill, Composition, Easing, Interactive, interpolate, useCurrentFrame, useVideoConfig } from "remotion";
-
-export const MyComposition = () => {
-  return (
-    <Composition
-      id="TitleCard"
-      component={TitleCard}
-      durationInFrames={150}
-      fps={30}
-      width={1920}
-      height={1080}
-    />
-  );
-};
+import { AbsoluteFill, Easing, Interactive, interpolate, useCurrentFrame, useVideoConfig } from "remotion";
 
 export const TitleCard: React.FC = () => {
   const frame = useCurrentFrame();
