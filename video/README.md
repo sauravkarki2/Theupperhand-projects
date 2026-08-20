@@ -82,3 +82,58 @@ with open network access and drop it in `public/`.
 
 `trimBefore={18}` skips the first 0.6s of the plate so the shot is already
 moving when the ad starts. Adjust to taste.
+
+## The `ChatAd` composition
+
+A 13-second, 1080x1080 product demo for an AI assistant: a prompt is typed and
+sent, the model thinks, and the answer streams in word by word with a
+kinetic-typography treatment. Source lives in `src/chat-ad/`.
+
+```console
+npx remotion render ChatAd out/chat-ad.mp4 \
+  --browser-executable=/opt/pw-browsers/chromium_headless_shell-1194/chrome-linux/headless_shell \
+  --codec=h264 --crf=18
+```
+
+### Editing it
+
+Almost everything worth changing lives in two files:
+
+- `script.ts` — the prompt, the answer, and the closing lockup. Wrap a phrase in
+  `[[double brackets]]` to mark it as a *punch* phrase: punch phrases are
+  rendered as the large accent headline of their bullet, and everything else in
+  that bullet becomes the smaller supporting line. Word counts feed the stream
+  timing automatically, so re-writing the copy re-times the animation.
+- `theme.ts` — palette, canvas size, duration, and the `BEAT` map. Every
+  animation in the piece is derived from those beat frames, so retiming the ad
+  means editing that one object.
+
+`timing.ts` turns the beats plus the word counts into a per-word reveal
+schedule (`WORD_STEP`, `BLOCK_GAP`). If the copy grows, check that the last
+word still lands before `BEAT.streamEnd`.
+
+### Fonts
+
+Inter and JetBrains Mono are embedded as base64 woff2 in `fonts-data.ts` and
+registered through the `FontFace` API in `fonts.ts`, behind a `delayRender()`
+gate. Nothing is fetched at render time, so the render is unaffected by the
+network egress policy and no frame can rasterise against a fallback face.
+
+### Provenance of the UI
+
+The chat UI is adapted from two 21st.dev components by `@elements-`:
+[`message-bubble`](https://21st.dev/@elements-/components/message-bubble) and
+[`streaming-text`](https://21st.dev/@elements-/components/streaming-text).
+
+Both ship as React components that animate on wall-clock time — `useState` plus
+`requestAnimationFrame` for the token reveal, CSS `animate-pulse` for the
+caret. Neither survives a Remotion render, where every frame is rasterised in
+isolation and no wall-clock state accumulates. So the *design* was ported and
+the *animation* rebuilt: layout, type scale, the squared mono chrome, the
+inverted user block and the caret idiom are kept; the reveal is re-driven from
+`useCurrentFrame()` so it is deterministic and seekable. Tailwind classes were
+resolved to inline styles because this canvas is 1080px square, roughly 2.6x
+the components' web type scale.
+
+The assistant mark, the "Slate AI" name, and the closing wordmark are
+placeholders — swap them in `primitives.tsx` and `script.ts`.
