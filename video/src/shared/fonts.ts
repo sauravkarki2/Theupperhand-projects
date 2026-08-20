@@ -18,13 +18,13 @@ let started = false;
  * usable, so no frame is ever rasterised against a fallback font. Safe to call
  * from several components — the work only happens once per page.
  */
-export const loadAdFonts = () => {
+export const loadFonts = () => {
   if (started || typeof document === "undefined") {
     return;
   }
   started = true;
 
-  const handle = delayRender("Loading chat-ad fonts");
+  const handle = delayRender("Loading reel fonts");
 
   Promise.all(
     FACES.map(([family, src, weight]) => {

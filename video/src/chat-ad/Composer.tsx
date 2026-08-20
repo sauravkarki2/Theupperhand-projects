@@ -1,6 +1,6 @@
 import { interpolate, spring, useCurrentFrame, useVideoConfig } from "remotion";
 import { BEAT, COLORS, EASE_OUT, EASE_SNAP } from "./theme";
-import { MONO } from "./fonts";
+import { MONO } from "../shared/fonts";
 import { Cursor } from "./primitives";
 import { PROMPT } from "./script";
 

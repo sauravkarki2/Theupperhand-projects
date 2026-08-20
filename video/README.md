@@ -137,3 +137,65 @@ the components' web type scale.
 
 The assistant mark, the "Slate AI" name, and the closing wordmark are
 placeholders — swap them in `primitives.tsx` and `script.ts`.
+
+## The `Reel` composition
+
+A 15-second, 1080x1920 vertical montage in the "AI agent product film" idiom —
+black, warm amber bloom, glass UI, light streaks, slow camera. Source lives in
+`src/reel/`.
+
+```console
+npx remotion render Reel out/upper-hand-reel.mp4 \
+  --browser-executable=/opt/pw-browsers/chromium_headless_shell-1194/chrome-linux/headless_shell \
+  --codec=h264 --crf=17
+```
+
+### The four shots
+
+| Frames | Shot |
+|---|---|
+| 0–82 | Glowing cube, white |
+| 74–246 | Agent IDE — held wide, then one long push into the task rail |
+| ~224–276 | Light-streak flood: the frame blows out to amber and the cut happens inside it |
+| 252–340 | Composer bar close-up, mode menu opening |
+| 336–396 | Cube again, amber |
+| 392–450 | `THE UPPER HAND` lockup |
+
+`theme.ts` holds the `SHOT` map that every shot boundary derives from, plus the
+palette. Note the shots deliberately overlap: the flood peaks *across* the
+IDE→composer cut, so light does the edit rather than a dissolve.
+
+### How the look is built
+
+There is no 3D renderer and no compositing app in the pipeline — it is all DOM
+and SVG, driven from `useCurrentFrame()`:
+
+- **Bloom** (`atmos.tsx`) is three stacked radial stops, not one. A single
+  gradient falls off too evenly and reads as a flat disc; real bloom has a hot
+  core, a wide mid and a long tail.
+- **The cube** (`Cube.tsx`) is a CSS 3D box drawn twice — a heavily blurred copy
+  underneath supplies bloom that follows the silhouette as it tumbles, with a
+  sharp copy on top. A gradient-only glow stays circular and gives the trick
+  away.
+- **The streaks** (`Flood.tsx`) are SVG paths with `pathLength={1}`, so a short
+  `strokeDasharray` segment can be walked along each curve with
+  `strokeDashoffset` regardless of its real length. Each arc is stroked four
+  times — ember halo, amber body, hot core, white centre.
+- **Grain** is `feTurbulence` rendered at 270x480 and scaled up. At full
+  resolution it is far too slow to rasterise 450 times, and the upscale gives a
+  coarser, more filmic grain than per-pixel noise anyway.
+- **The logo sheen** paints into each word's own text fill via
+  `background-clip: text`. An overlay gradient with a blend mode lights the
+  background between the letters too, which reads as a grey rectangle.
+
+### What this is not
+
+The piece is a study of a reel by **@jup.creatives** — same shot grammar and
+grade, rebuilt from scratch with this project's own branding and content. The
+original's second shot is a real screen recording of an IDE; here that UI is
+rebuilt in DOM (`IdeWindow.tsx`, `ComposerBar.tsx`) so the camera can push into
+it at any magnification without turning to mush. It is a generic agent IDE, not
+a clone of any shipping product's chrome.
+
+There is no audio. The reference is cut to music, which carries a lot of its
+energy; this renders silent and wants a track laid under it.

@@ -1,6 +1,6 @@
 import { interpolate, spring, useCurrentFrame, useVideoConfig } from "remotion";
 import { COLORS, EASE_OUT } from "./theme";
-import { SANS } from "./fonts";
+import { SANS } from "../shared/fonts";
 
 /**
  * One streamed word.

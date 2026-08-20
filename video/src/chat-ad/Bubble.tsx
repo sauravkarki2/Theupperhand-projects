@@ -1,6 +1,6 @@
 import { interpolate, spring, useCurrentFrame, useVideoConfig } from "remotion";
 import { COLORS, EASE_OUT } from "./theme";
-import { MONO, SANS } from "./fonts";
+import { MONO, SANS } from "../shared/fonts";
 import { Mark } from "./primitives";
 
 /**

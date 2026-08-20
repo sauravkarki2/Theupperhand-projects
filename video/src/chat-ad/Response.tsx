@@ -1,6 +1,6 @@
 import { interpolate, useCurrentFrame } from "remotion";
 import { COLORS, EASE_OUT } from "./theme";
-import { MONO } from "./fonts";
+import { MONO } from "../shared/fonts";
 import { BLOCKS, type PlacedBlock } from "./script";
 import { blockFrame, wordFrame } from "./timing";
 import { Word } from "./Word";

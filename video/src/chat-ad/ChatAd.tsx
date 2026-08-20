@@ -1,6 +1,6 @@
 import { AbsoluteFill, interpolate, useCurrentFrame } from "remotion";
 import { BEAT, COLORS, EASE_OUT } from "./theme";
-import { MONO, SANS, loadAdFonts } from "./fonts";
+import { MONO, SANS, loadFonts } from "../shared/fonts";
 import { PROMPT } from "./script";
 import { Bubble } from "./Bubble";
 import { Composer } from "./Composer";
@@ -85,7 +85,7 @@ const Thinking: React.FC = () => {
 };
 
 export const ChatAd: React.FC = () => {
-  loadAdFonts();
+  loadFonts();
   const frame = useCurrentFrame();
 
   // Slow push-in across the answer, so the frame never sits perfectly still.
