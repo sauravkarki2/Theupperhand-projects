@@ -10,9 +10,11 @@
     "@remotion/google-fonts": "^4.0.514",
     "@remotion/tailwind-v4": "4.0.514",
     "@remotion/transitions": "4.0.514",
+    "clsx": "^2.1.1",
     "react": "19.2.3",
     "react-dom": "19.2.3",
     "remotion": "4.0.514",
+    "tailwind-merge": "^3.6.0",
     "tailwindcss": "4.0.0"
   },
   "devDependencies": {

@@ -2,6 +2,7 @@ import "./index.css";
 import { Composition, Folder } from "remotion";
 import { TitleCard } from "./Composition";
 import { ChatAd } from "./chat-ad/ChatAd";
+import { GalleryDemo } from "./gallery/GalleryDemo";
 import { Reel } from "./reel/Reel";
 import * as R from "./reel/theme";
 import { DURATION, FPS, SIZE } from "./chat-ad/theme";
@@ -20,6 +21,14 @@ export const RemotionRoot: React.FC = () => {
         fps={R.FPS}
         width={R.WIDTH}
         height={R.HEIGHT}
+      />
+      <Composition
+        id="GalleryDemo"
+        component={GalleryDemo}
+        durationInFrames={90}
+        fps={30}
+        width={1920}
+        height={1080}
       />
       <Composition
         id="ChatAd"

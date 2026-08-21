@@ -225,3 +225,44 @@ a clone of any shipping product's chrome.
 
 There is no audio. The reference is cut to music, which carries a lot of its
 energy; this renders silent and wants a track laid under it.
+
+## shadcn/ui components in this project
+
+This is a Remotion project, not a Next.js app, but it now carries the shadcn
+layout so registry components drop in unmodified:
+
+```
+components.json          # style: new-york, cssVariables, aliases
+src/components/ui/       # vendored components land here
+src/lib/utils.ts         # the standard `cn()` helper
+```
+
+`@/*` maps to `./src/*` in **two** places, and both are required:
+`tsconfig.json` `paths` satisfies the typechecker, and a `resolve.alias` in
+`remotion.config.ts` satisfies the bundler — Remotion resolves modules itself
+and does not read tsconfig paths.
+
+### The shadcn CLI does not work here
+
+`npx shadcn@latest init` and `add` both fetch from `ui.shadcn.com`, which this
+environment's egress policy blocks (403 at the proxy). The structure above was
+created by hand instead. On an unrestricted machine the CLI would work normally
+against this `components.json`.
+
+### Two things to fix in every component you vendor
+
+Remotion's own ESLint plugin catches both, and they are the same two problems
+every time:
+
+- **`@remotion/warn-native-media-tag`** — a bare `<img>` is not waited on, so
+  frames rasterise before the image decodes and you get half-painted elements.
+  Either swap it for Remotion's `<Img>`, or preload at the call site behind
+  `delayRender()`; `GalleryDemo.tsx` does the latter so the vendored file stays
+  pristine.
+- **`@remotion/non-pure-animation`** — CSS transitions, `useState` hovers and
+  framer-motion springs all animate on wall-clock time. Nothing hovers in a
+  render and no state accumulates between frames, so these render frozen. Any
+  motion has to be re-driven from `useCurrentFrame()`.
+
+`src/components/ui/**` is excluded from lint so vendored files stay diffable
+against upstream; the fixes live at the call site.
