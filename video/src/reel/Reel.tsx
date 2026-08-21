@@ -2,7 +2,7 @@ import { AbsoluteFill, interpolate, useCurrentFrame } from "remotion";
 import { C, EASE_DRIFT, EASE_OUT, SHOT } from "./theme";
 import { loadFonts } from "../shared/fonts";
 import { Bloom, Grain, Vignette } from "./atmos";
-import { ComposerBar } from "./ComposerBar";
+import { Composer } from "./ComposerBar";
 import { Cube } from "./Cube";
 import { Flood } from "./Flood";
 import { IdeWindow, WIN_H, WIN_W } from "./IdeWindow";
@@ -65,7 +65,12 @@ const ComposerShot: React.FC<{ local: number; span: number }> = ({ local, span }
     extrapolateRight: "clamp",
     easing: EASE_DRIFT,
   });
-  const drift = interpolate(local, [0, span], [128, 40], {
+  const chips = interpolate(local, [4, 26], [0, 1], {
+    extrapolateLeft: "clamp",
+    extrapolateRight: "clamp",
+    easing: EASE_OUT,
+  });
+  const drift = interpolate(local, [0, span], [238, 150], {
     extrapolateLeft: "clamp",
     extrapolateRight: "clamp",
     easing: EASE_DRIFT,
@@ -74,8 +79,14 @@ const ComposerShot: React.FC<{ local: number; span: number }> = ({ local, span }
   return (
     <AbsoluteFill style={{ alignItems: "center", justifyContent: "center" }}>
       <Bloom x="10%" y="74%" size={520} intensity={0.24} color={C.ember} />
-      <div style={{ transform: `translate(58px, ${drift}px) scale(${push})` }}>
-        <ComposerBar width={1110} menu={menu} hovered={1} placeholder="Plan the mission interface" />
+      <div style={{ transform: `translateY(${drift}px) scale(${push})` }}>
+        <Composer
+          width={980}
+          menu={menu}
+          hovered={1}
+          prompt="Plan the mission interface"
+          chips={chips}
+        />
       </div>
     </AbsoluteFill>
   );

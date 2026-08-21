@@ -188,6 +188,32 @@ and SVG, driven from `useCurrentFrame()`:
   `background-clip: text`. An overlay gradient with a blend mode lights the
   background between the letters too, which reads as a grey rectangle.
 
+### The composer, and 21st.dev
+
+`ComposerBar.tsx` is a port of [`ai-prompt-input`](https://21st.dev/@senommu/components/ai-prompt-input)
+by **@senommu** on 21st.dev — "premium AI prompt composer with rotating
+placeholders, floating toolbar, and Cursor-style model selector".
+
+What survived the port is the *surface language*: the heavy `rounded-[1.75rem]`
+two-pixel-bordered shell, removable tool chips above the field, a toolbar fenced
+off by a top border with icon buttons left and send right, and the model pill
+that splits a name from its modifiers (`Opus 4.5` · `High` · `Fast`). The model
+list is trimmed from the component's own `DEFAULT_AI_MODELS`.
+
+What did not survive is all ~2600 lines of behaviour. The original drives every
+open, close and hover through framer-motion springs, `AnimatePresence` and
+controlled React state — wall-clock animation that cannot work in a Remotion
+render, where each frame is rasterised in isolation and no state accumulates
+between them. Every transition here is instead a plain 0→1 number the caller
+derives from the frame: `menu`, `chips`, `hovered`. This is the general rule for
+pulling anything off 21st.dev into Remotion — **take the design, rebuild the
+motion.**
+
+The bar is drawn once at a fixed intrinsic width (`INTRINSIC = 1000`) and scaled
+to fit by the `Composer` wrapper, so the version at the foot of the IDE pane and
+the one filling the frame in shot 4 are provably the same object at two
+distances, not two separately-tuned designs.
+
 ### What this is not
 
 The piece is a study of a reel by **@jup.creatives** — same shot grammar and

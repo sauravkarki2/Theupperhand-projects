@@ -1,7 +1,7 @@
 import { interpolate, useCurrentFrame } from "remotion";
 import { C, EASE_OUT } from "./theme";
 import { MONO, SANS } from "../shared/fonts";
-import { ComposerBar } from "./ComposerBar";
+import { Composer } from "./ComposerBar";
 
 export const WIN_W = 1600;
 export const WIN_H = 1000;
@@ -335,7 +335,7 @@ export const IdeWindow: React.FC<{ local: number; menu?: number }> = ({
           </div>
 
           <div style={{ flex: 1 }} />
-          <ComposerBar width={476} menu={menu} />
+          <Composer width={476} menu={menu} chips={0} height={192} />
         </div>
 
         {/* Editor */}
