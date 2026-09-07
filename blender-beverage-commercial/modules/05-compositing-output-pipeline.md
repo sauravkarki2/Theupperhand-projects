@@ -947,3 +947,545 @@ if __name__ == "__main__":
 > **`CurveRGB` channel index:** in the compositor `CompositorNodeCurveRGB.mapping.curves` is ordered **C, R, G, B** (index 0 = combined). Verify once in your build by editing index 0 and watching which curve moves in the UI — a wrong index silently grades a single channel.
 
 ---
+
+## 4. The "make CG look real" checklist
+
+Product and liquid work is the hardest CG to sell, because the viewer has seen ten thousand real beverage ads and knows exactly what a bottle looks like. Everything below is cheap and every one of them is doing work.
+
+| # | Move | Where | Value | Failure mode if overdone |
+|---|---|---|---|---|
+| 1 | **Imperfection** — fingerprints, dust, micro-scratches, uneven condensation, a label that isn't perfectly centred, a bevel on every hard edge | Shading (module 03), but *check for it here* | — | Looks dirty / cheap |
+| 2 | **Highlight bloom** | Glare Fog Glow | thr 1.0, size 8, add 0.25–0.45 | Hazy, milky, "dream sequence" |
+| 3 | **Aperture streaks on wet speculars** | Glare Streaks, masked to liquid | thr 8.0, 4 streaks, 15°, add 0.15–0.30 | J.J. Abrams |
+| 4 | **Chromatic aberration** | Lens Distortion Dispersion | **0.003–0.006** | >0.02 = colour fringes everywhere = reads as a bug |
+| 5 | **Barrel distortion** | Lens Distortion Distort | 0.000–0.008, `use_fit` on | >0.03 = GoPro |
+| 6 | **Vignette** | Ellipse→Blur→Multiply | Fac 0.15–0.25 | >0.35 = Instagram filter |
+| 7 | **Black point lift** | Curves point 0 → y=0.008, or Lift (1.006,1.008,1.018) | 0.005–0.015 | >0.03 = washed-out, no contrast |
+| 8 | **Film grain** | Noise Texture → Overlay | Fac 0.02–0.05 | >0.08 = "I applied a grain plugin" |
+| 9 | **DON'T over-sharpen** | Filter Sharpen | ≤0.25 at 1080p | Bright halo on the bottle silhouette |
+| 10 | **Non-uniform sharpness** | Sharpen masked to product only | — | Uniformly crisp frame = CG tell |
+| 11 | **Real motion blur** (not vector blur) | Render Properties, Shutter 0.5 | 180° shutter | Strobing splash droplets |
+| 12 | **Highlight roll-off, not clipping** | Filmic/AgX view transform, not Standard | — | Blown flat white patches |
+| 13 | **Slightly imperfect white balance** | Grade — let the frame lean 100–200 K warm | Gain (1.06, 1.00, 0.94) | A perfectly neutral frame reads as a render, not a photograph |
+| 14 | **Splash reads neutral-white against a warm key** | Hue/Sat sat 0.85 on liquid matte | — | Orange water = juice = wrong product |
+| 15 | **Micro camera shake** | Camera noise modifier, amplitude ~0.1–0.3% of frame | — | A perfectly locked camera is a tripod; even tripods drift |
+| 16 | **Out-of-focus foreground element** | A droplet or fruit slice near the lens, well out of focus | — | Gives the lens a *depth* to have |
+| 17 | **Something breaks the frame edge** | Let a droplet or the fruit clip the border | — | Everything perfectly contained = product-render, not commercial |
+| 18 | **Consistent noise floor** | Grain (see #8) | — | Some regions mathematically clean, others denoised = uncanny |
+
+**Two anti-patterns specific to liquid:**
+
+- **The splash is too symmetric.** Real splashes are asymmetric because the impact was off-axis. If your Mantaflow crown is radially perfect, offset the emitter or the obstacle.
+- **The droplets are all the same size.** Real spray is a power-law distribution — a few big blobs, many tiny ones. If your resolution can't produce the small ones, fake them with a particle/geo-nodes scatter (module 04) or add a subtle out-of-focus droplet plate in comp.
+
+**The single highest-value item on this list is #14.** A neutral splash against a warm backdrop is the entire visual grammar of beverage advertising. It is also the one that is free and that almost nobody does.
+
+---
+
+## 5. Video Sequence Editor assembly
+
+Use a **separate .blend** for the edit (`07_edit/edit_v003.blend`). Reasons: its scene needs a different view transform (§11.6), you don't want the 40 GB fluid cache attached to your cutting file, and it keeps render settings from colliding.
+
+### 5.1 Bringing in the sequence
+
+- **Add → Image/Sequence**, select the *whole* folder of frames (`A` to select all), one strip.
+- **Set the edit scene's `fps` to exactly the render fps** *before* adding strips. Adding at the wrong fps stretches strip durations and is annoying to fix afterwards.
+- **Colour space per strip:** `strip.colorspace_settings.name`. If you're loading **display-referred PNGs**, set it to `sRGB` and set the edit scene's view transform to **`Standard`**. If you're loading **linear EXRs**, set the strip to `Linear`/`Linear Rec.709` and set the scene's view transform to **AgX/Filmic**. Getting this wrong is the #1 cause of "why is my video washed out" (§11.6).
+- **Proxies** for scrubbing on big sequences: `strip.use_proxy = True`, build 50%, `strip.proxy.quality = 90`. Rebuild with `bpy.ops.sequencer.rebuild_proxy()`. Set `Proxy Render Size` to 50% in the preview sidebar; **switch it back to `None`/Full before final render** or you'll deliver a half-res encode.
+
+### 5.2 Endcard / logo
+
+Two options:
+
+1. **Image strip** — export the logo lockup as a PNG **with alpha** at 2× delivery resolution. Add it above the footage on a higher channel, set `blend_type = 'ALPHA_OVER'`. Transform it with the strip's Transform (`strip.transform.scale_x/y`, `offset_x/y`) and keyframe those for a slow 2–4% push-in over the endcard's duration. Static logos read as dead air; a slow scale drift reads as intentional.
+2. **Scene strip** — a second Blender scene containing the 3D endcard (bottle + text), added with **Add → Scene**. Renders live at edit time. Heavier, but you can restage the endcard without leaving the file.
+
+Endcard duration: **1.5–2.5 s** minimum for a 15 s spot, held *dead still* on the logo for the last second (broadcast clearance often requires a static, legible logo hold).
+
+### 5.3 Cross-dissolves and cuts
+
+- **Cross:** select two overlapping strips → **Add → Transition → Cross** (or `Gamma Cross`, which blends in a gamma-corrected space and is usually the better-looking one for a bright product shot — it avoids the mid-dissolve dip in perceived brightness).
+- **Duration:** 8–12 frames at 24 fps for a soft product dissolve; 4–6 frames for a snappy one; 20+ frames only for the final fade to the endcard.
+- **Beverage ads mostly cut, they don't dissolve.** Reserve dissolves for: splash → product hero, and product → endcard. Everything else is a hard cut on the beat.
+- **Fade to black:** `Add → Color` strip (black) on a channel above, keyframe its `blend_alpha` 0→1. Or `Shift+F` / the `Fade` operator in the sidebar.
+
+### 5.4 Speed control and the ramp
+
+`Add → Effect Strip → Speed Control`. The Speed effect is a *time remapper* applied to the strip beneath it.
+
+`speed_control` modes:
+
+| Mode | Use |
+|---|---|
+| `STRETCH` | Retime the source to exactly fill the strip's length. Set the strip's `frame_final_duration` and the source stretches to fit. Simplest constant retime. |
+| `MULTIPLY` | Constant multiplier (`speed_factor`). 0.5 = half speed. |
+| `LENGTH` | Target a specific output length in frames. |
+| `FRAME_NUMBER` | **The ramp.** `speed_frame_number` is keyframeable — you author an explicit "at output frame N, show source frame M" curve. |
+
+**The beverage-ad speed ramp**, in order:
+
+1. Render the splash at **60 fps** (or render 24 fps with sub-frame-accurate motion blur and enough frames that you have footage to stretch). You cannot slow down footage you didn't shoot fast.
+2. Add a Speed Control strip over the splash strip, `speed_control = 'FRAME_NUMBER'`.
+3. Extend the strip's `frame_final_duration` to the length you want the ramp to occupy.
+4. Keyframe `speed_frame_number`: normal rate into the impact, near-flat (slow) across the crown, then accelerating back out. Set the F-curve interpolation to **Bezier** and hand-shape the handles — linear keys give you a speed *step*, not a ramp, and it reads as a glitch.
+5. **Turn on frame interpolation** on the underlying strip if you're stretching beyond the source frames — but honestly, Blender's VSE has no optical-flow interpolation. If you need more slow-mo than you rendered, **re-render more frames**. Frame blending on a splash produces ghosting that looks exactly as bad as it sounds.
+
+**Motion blur and retiming fight each other.** Footage rendered at 60 fps with a 180° shutter has 1/120 s of blur. Slowed to 25%, that blur is now "too sharp" for the apparent motion — which is *correct* (that's what a real high-speed camera does) and is part of why slow-mo looks slow-mo. Don't try to fix it.
+
+### 5.5 Audio — the thing a beverage ad actually lives on
+
+A beverage spot is 60% sound design. The pour, the fizz, the crack of the cap, the whoosh into the endcard.
+
+- **Add → Sound**, one strip per element on its own channel. Typical stack:
+
+| Channel | Element | Notes |
+|---|---|---|
+| A1 | Music bed | Sets the tempo everything else locks to |
+| A2 | Whoosh (pre-impact) | Starts 6–10 frames *before* the visual impact — the whoosh is the anticipation |
+| A3 | Splash / impact | Lands **exactly** on the impact frame |
+| A4 | Fizz / carbonation | Long tail under the hero, low level |
+| A5 | Pour / glug | Under the pour section |
+| A6 | Cap crack / can tab | One sharp transient |
+| A7 | VO / endcard sting | |
+
+- `strip.show_waveform = True` — non-negotiable for syncing.
+- `strip.volume` is linear gain (keyframeable). `strip.pan` −1..1 (mono sources only).
+- **Duck the music** under the VO: keyframe the music strip's `volume` down ~6 dB (×0.5) 4 frames before the VO and back up 6 frames after.
+- **Playback sync:** set `scene.sync_mode = 'AUDIO_SYNC'` so Blender drops video frames to keep audio real-time. Without it, a heavy sequence plays back slow and you'll sync to the wrong frames.
+- **Audio scrubbing:** enable it in the Playback popover so you can hear transients while dragging.
+- **Blender does not mix.** No EQ, no compression, no limiter, no loudness metering. Do the real mix in Reaper/Audition/Resolve Fairlight and bring back a single stereo stem. Blender's job is sync, not mixing.
+
+### 5.6 Syncing the splash impact to a beat
+
+The technique, precisely:
+
+1. Drop the music strip in, `show_waveform = True`.
+2. Find the BPM. At 24 fps: **frames per beat = 24 × 60 / BPM**. At 120 BPM that's **12 frames**. At 128 BPM, 11.25 frames — which means the grid drifts, so mark the actual transients rather than trusting arithmetic.
+3. Scrub to each kick transient and drop a **timeline marker** (`M`). Name the downbeats.
+4. Slide the *splash strip* so its impact frame lands on a marker. Don't move the marker.
+5. **Cut on the beat, land the impact one to two frames *before* it.** Physical impacts read as synced when the visual leads the audio very slightly, because the eye is slower than the ear at this scale. Two frames early at 24 fps is the sweet spot; on the beat exactly feels marginally late.
+6. **Bake Sound to F-Curves** (`Graph Editor → Channel → Bake Sound to F-Curves`, or `bpy.ops.graph.sound_bake()`) if you want something *driven* by the audio — e.g. the endcard logo scale pulsing on the kick, or a light intensity throbbing with the bass. Set `low`/`high` filters to isolate the kick band (20–120 Hz) before baking or you'll get mush.
+
+### 5.7 bpy — assemble the edit
+
+```python
+# ── build_edit.py ──────────────────────────────────────────────────────────
+# VSE assembly. Blender 3.6; 4.4+ renamed .sequences -> .strips (see _seqs()).
+import bpy, os
+
+def _seqs(scene):
+    """4.4 renamed SequenceEditor.sequences to .strips (Sequence -> Strip)."""
+    se = scene.sequence_editor or scene.sequence_editor_create()
+    return getattr(se, "strips", None) or se.sequences
+
+def setup_edit_scene(scene=None, *, fps=24, fps_base=1.0, res=(1920, 1080),
+                     display_referred_input=True):
+    scene = scene or bpy.context.scene
+    r = scene.render
+    r.fps, r.fps_base = fps, fps_base           # 23.976 -> fps=24, fps_base=1.001
+    r.resolution_x, r.resolution_y = res
+    r.resolution_percentage = 100
+    scene.sync_mode = 'AUDIO_SYNC'
+    # CRITICAL: don't tone-map twice. See section 11.6.
+    if display_referred_input:
+        scene.view_settings.view_transform = 'Standard'
+        scene.view_settings.look = 'None'
+        scene.sequencer_colorspace_settings.name = 'sRGB'
+    else:                                        # feeding linear EXRs
+        scene.view_settings.view_transform = 'AgX' if bpy.app.version >= (4,0,0) else 'Filmic'
+        scene.sequencer_colorspace_settings.name = 'Linear Rec.709'
+    return scene
+
+def add_image_sequence(scene, folder, channel=1, frame_start=1,
+                       colorspace='sRGB', name="SHOT010"):
+    folder = bpy.path.abspath(folder)
+    files = sorted(f for f in os.listdir(folder)
+                   if f.lower().endswith(('.png', '.exr', '.jpg', '.tif')))
+    if not files:
+        raise RuntimeError(f"no frames in {folder}")
+    s = _seqs(scene).new_image(name=name, filepath=os.path.join(folder, files[0]),
+                              channel=channel, frame_start=frame_start)
+    for f in files[1:]:
+        s.elements.append(f)
+    s.colorspace_settings.name = colorspace
+    print(f"[edit] {name}: {len(files)} frames @ ch{channel} from {frame_start}")
+    return s
+
+def add_sound(scene, filepath, channel, frame_start, volume=1.0, show_wave=True):
+    s = _seqs(scene).new_sound(name=os.path.basename(filepath),
+                               filepath=bpy.path.abspath(filepath),
+                               channel=channel, frame_start=frame_start)
+    s.volume = volume
+    s.show_waveform = show_wave
+    return s
+
+def add_cross(scene, a, b, channel, gamma=True):
+    """Gamma Cross avoids the mid-dissolve brightness dip. Strips must overlap."""
+    return _seqs(scene).new_effect(
+        name="XDISS", type='GAMMA_CROSS' if gamma else 'CROSS',
+        channel=channel, frame_start=b.frame_final_start,
+        frame_end=a.frame_final_end, seq1=a, seq2=b)
+
+def add_speed_ramp(scene, strip, channel, keys):
+    """keys = [(output_frame, source_frame), ...] -> a real, shapeable ramp."""
+    sp = _seqs(scene).new_effect(name="SPEED", type='SPEED', channel=channel,
+                                 frame_start=strip.frame_final_start,
+                                 frame_end=strip.frame_final_end, seq1=strip)
+    sp.speed_control = 'FRAME_NUMBER'
+    for out_f, src_f in keys:
+        sp.speed_frame_number = src_f
+        sp.keyframe_insert("speed_frame_number", frame=out_f)
+    # Bezier, not linear — linear keys give a speed STEP, not a ramp.
+    ad = scene.animation_data
+    if ad and ad.action:
+        for fc in ad.action.fcurves:
+            if "speed_frame_number" in fc.data_path:
+                for kp in fc.keyframe_points:
+                    kp.interpolation = 'BEZIER'
+                    kp.handle_left_type = kp.handle_right_type = 'AUTO_CLAMPED'
+    return sp
+
+def mark_beats(scene, bpm, first_beat_frame, count=32, label="BEAT"):
+    fpb = scene.render.fps / scene.render.fps_base * 60.0 / bpm
+    for i in range(count):
+        f = int(round(first_beat_frame + i * fpb))
+        scene.timeline_markers.new(f"{label}{i+1}", frame=f)
+    print(f"[edit] {bpm} BPM -> {fpb:.2f} frames/beat, {count} markers")
+
+# --- example --------------------------------------------------------------
+if __name__ == "__main__":
+    sc = setup_edit_scene(fps=24, res=(1920, 1080), display_referred_input=True)
+    hero = add_image_sequence(sc, "//05_renders/shot010/png/", channel=1, frame_start=1)
+    add_sound(sc, "//07_edit/audio/music_120bpm.wav", channel=5, frame_start=1)
+    add_sound(sc, "//07_edit/audio/whoosh.wav",       channel=6, frame_start=155)
+    add_sound(sc, "//07_edit/audio/splash_impact.wav",channel=7, frame_start=163)
+    mark_beats(sc, bpm=120, first_beat_frame=1, count=24)
+    add_speed_ramp(sc, hero, channel=3, keys=[(1,1), (150,150), (175,163), (250,250)])
+```
+
+---
+
+## 6. Encoding
+
+### 6.1 What Blender's FFmpeg panel actually maps to
+
+`Output Properties → Output → File Format: FFmpeg Video`, then the **Encoding** panel.
+
+| Blender control | `bpy` | libx264 equivalent |
+|---|---|---|
+| Container | `scene.render.ffmpeg.format` | `-f` / file extension |
+| Video Codec | `.codec` | `-c:v` |
+| **Output Quality** | `.constant_rate_factor` | `-crf` (mapping below) |
+| **Encoding Speed** | `.ffmpeg_preset` | `-preset` (`BEST`→`slower`, `GOOD`→`medium`, `REALTIME`→`veryfast`) |
+| Keyframe Interval | `.gopsize` | `-g` |
+| Max B-frames | `.use_max_b_frames` / `.max_b_frames` | `-bf` |
+| Bitrate / Min / Max / Buffer | `.video_bitrate` / `.minrate` / `.maxrate` / `.buffersize` | `-b:v` / `-minrate` / `-maxrate` / `-bufsize` |
+| Audio Codec / Bitrate | `.audio_codec` / `.audio_bitrate` | `-c:a` / `-b:a` |
+
+**Output Quality → CRF mapping** (Blender's internal constants):
+
+| Blender label | CRF |
+|---|---|
+| Lossless | 0 |
+| Perceptually Lossless | **17** |
+| High Quality | **20** |
+| Medium Quality | **23** |
+| Low Quality | 26 |
+| Very Low Quality | 29 |
+| Lowest Quality | 32 |
+| None | uses `video_bitrate` instead |
+
+Lower CRF = better = bigger. Each ±6 CRF is roughly ×2 / ÷2 file size.
+
+**What Blender does NOT expose:**
+- **H.264 profile/level.** Blender's libx264 defaults are fine (it produces High profile, `yuv420p`) but you cannot force `-profile:v high -level 4.0` for a fussy broadcast QC.
+- **ProRes.** Not in the codec list. Use DNxHD in Blender, or encode externally with `prores_ks`.
+- **`-movflags +faststart`.** Blender-written MP4s do not have the moov atom at the front, so they buffer badly when streamed from a web server. For any client-review link, **re-mux**: `ffmpeg -i in.mp4 -c copy -movflags +faststart out.mp4`.
+- **10-bit H.264/HEVC**, colour VUI tags, closed-GOP enforcement, `-sc_threshold`.
+
+**Conclusion: encode the review copies from Blender, encode the deliverables with standalone ffmpeg.** Blender's encoder is a convenience, not a mastering tool.
+
+### 6.2 Preset table — Blender FFmpeg panel
+
+| Setting | (a) Client review | (b) IG / TikTok 9:16 | (c) YouTube | (d) Broadcast mezzanine |
+|---|---|---|---|---|
+| Resolution | 1920×1080 | **1080×1920** | 3840×2160 (or 1920×1080) | 1920×1080 |
+| FPS | match master (24) | **30** | 24 | **25** (PAL) / 29.97 (NTSC) |
+| Container (`format`) | `MPEG4` | `MPEG4` | `MPEG4` | `QUICKTIME` |
+| Codec (`codec`) | `H264` | `H264` | `H264` | **`DNXHD`** (no ProRes in Blender) |
+| Output Quality | **`MEDIUM`** (CRF 23) | **`HIGH`** (CRF 20) | **`PERC_LOSSLESS`** (CRF 17) | `NONE` + bitrate |
+| Encoding Speed | `GOOD` | `BEST` | `BEST` | `BEST` |
+| Keyframe Interval | 18 | **30** (= fps, ~closed GOP) | **12** (= fps/2, YouTube's rec.) | 1 (all-intra) |
+| Max B-frames | off | off (safer for social) | on, 2 | off |
+| Bitrate | — (CRF) | — (CRF) | — (CRF) | ~145000 kb/s (DNxHD 145) |
+| Audio codec | `AAC` | `AAC` | `AAC` | `PCM` |
+| Audio bitrate | 192 | 192 | 384 | — |
+| Audio mixrate | 48000 | 48000 | 48000 | 48000 |
+| Burn-in (`use_stamp`) | **On** — frame, filename, note | **Off** | Off | Off |
+| Typical size, 15 s | 25–45 MB | 20–35 MB | 180–400 MB (4K) | ~270 MB |
+
+### 6.3 Preset table — standalone ffmpeg (the deliverables)
+
+Encode from **16-bit PNG or TIFF with the view transform already applied**, *not* from EXR. ffmpeg reads EXR as linear and has no idea what AgX is — you will get a dark, wrong image. (`-apply_trc iec61966_2_1` approximates sRGB but cannot reproduce Filmic/AgX.)
+
+**(a) Client review** — small, scrubbable, faststart, burn-in already baked by Blender's stamp:
+
+```bash
+ffmpeg -y -framerate 24 -i png/shot010_%04d.png \
+  -c:v libx264 -profile:v high -level 4.0 -pix_fmt yuv420p \
+  -crf 22 -preset medium -g 24 -bf 2 \
+  -vf "scale=1920:1080:flags=lanczos" \
+  -movflags +faststart \
+  -c:a aac -b:a 192k -ar 48000 \
+  -metadata title="SHOT010 v012 REVIEW" \
+  deliver/shot010_v012_review.mp4
+```
+
+**(b) Instagram / TikTok, 9:16 vertical** — 1080×1920, closed GOP, faststart, conservative for their re-encoder:
+
+```bash
+ffmpeg -y -framerate 30 -i png/shot010_%04d.png -i audio/mix.wav \
+  -vf "crop=ih*9/16:ih:(iw-ih*9/16)/2:0,scale=1080:1920:flags=lanczos,format=yuv420p" \
+  -c:v libx264 -profile:v high -level 4.0 \
+  -crf 18 -preset slow -g 30 -keyint_min 30 -sc_threshold 0 -bf 0 \
+  -x264-params "colorprim=bt709:transfer=bt709:colormatrix=bt709:range=tv" \
+  -color_primaries bt709 -color_trc bt709 -colorspace bt709 -color_range tv \
+  -movflags +faststart \
+  -c:a aac -b:a 192k -ar 48000 -ac 2 \
+  -af "loudnorm=I=-14:TP=-1.0:LRA=11" \
+  -shortest deliver/shot010_v012_9x16.mp4
+```
+
+Notes: `-bf 0` and `-sc_threshold 0` give a strictly regular, closed GOP, which social re-encoders handle far better. `loudnorm` to **−14 LUFS / −1.0 dBTP** is the platform target for IG/TikTok/YouTube; ship it hot and they'll turn you down, ship it quiet and you sound weak.
+
+**(c) YouTube** — upload the best master you can; YouTube re-encodes everything anyway, so give it headroom:
+
+```bash
+# 4K SDR master
+ffmpeg -y -framerate 24 -i png4k/shot010_%04d.png -i audio/mix.wav \
+  -c:v libx264 -profile:v high -level 5.1 -pix_fmt yuv420p \
+  -crf 16 -preset slower -g 12 -bf 2 \
+  -color_primaries bt709 -color_trc bt709 -colorspace bt709 -color_range tv \
+  -movflags +faststart \
+  -c:a aac -b:a 384k -ar 48000 -ac 2 \
+  -af "loudnorm=I=-14:TP=-1.0:LRA=11" \
+  -shortest deliver/shot010_v012_yt4k.mp4
+```
+
+YouTube's own recommended *bitrate* targets, if you prefer CBR-ish over CRF: **1080p24/30 → 8 Mbps**, 1080p60 → 12, **2160p24/30 → 35–45 Mbps**, 2160p60 → 53–68. Their recommended GOP is **half the frame rate**, closed. CRF 16 will exceed all of those, which is what you want.
+
+**(d) Broadcast / ProRes** — the mezzanine you hand an agency or a post house:
+
+```bash
+# ProRes 422 HQ (profile 3). 4444 = profile 4 (+alpha, yuva444p10le).
+ffmpeg -y -framerate 25 -i png16/shot010_%04d.png -i audio/mix.wav \
+  -vf "scale=1920:1080:flags=lanczos,format=yuv422p10le" \
+  -c:v prores_ks -profile:v 3 -vendor apl0 -qscale:v 9 \
+  -color_primaries bt709 -color_trc bt709 -colorspace bt709 \
+  -c:a pcm_s24le -ar 48000 -ac 2 \
+  -shortest deliver/shot010_v012_ProRes422HQ.mov
+```
+
+ProRes `-profile:v`: `0` Proxy, `1` LT, `2` 422, **`3` 422 HQ**, `4` 4444, `5` 4444 XQ. `-qscale:v` 9–13 (lower = better; 9 is the usual HQ target). `-vendor apl0` makes some Apple tools happier. DNxHR alternative: `-c:v dnxhd -profile:v dnxhr_hqx -pix_fmt yuv422p10le`.
+
+**Extras worth knowing:**
+
+```bash
+# Grain at delivery resolution (see 3.8 resolution caveat)
+-vf "...,noise=alls=6:allf=t+u"
+
+# Proper linear-light rescale (better than plain scale for big downscales)
+-vf "zscale=t=linear:npl=100,zscale=w=1920:h=1080:f=spline36,zscale=t=bt709,format=yuv420p"
+
+# Re-mux an existing Blender MP4 for web streaming (no re-encode, seconds)
+ffmpeg -i in.mp4 -c copy -movflags +faststart out.mp4
+
+# Extract a still for the client deck
+ffmpeg -i deliver/shot010.mp4 -ss 00:00:06.5 -frames:v 1 -q:v 1 still_frame163.jpg
+
+# Verify what you actually shipped
+ffprobe -v error -select_streams v:0 \
+  -show_entries stream=codec_name,profile,width,height,r_frame_rate,pix_fmt,color_range,color_space \
+  -of default=nw=1 deliver/shot010.mp4
+```
+
+### 6.4 bpy — apply any preset
+
+```python
+# ── encode_presets.py ──────────────────────────────────────────────────────
+import bpy
+
+PRESETS = {
+    "review": dict(
+        res=(1920,1080), fps=24, container='MPEG4', codec='H264',
+        crf='MEDIUM', speed='GOOD', gop=18, bframes=0,
+        acodec='AAC', abitrate=192, stamp=True,
+        path="//08_deliver/shot010_v012_review.mp4"),
+    "social_9x16": dict(
+        res=(1080,1920), fps=30, container='MPEG4', codec='H264',
+        crf='HIGH', speed='BEST', gop=30, bframes=0,
+        acodec='AAC', abitrate=192, stamp=False,
+        path="//08_deliver/shot010_v012_9x16.mp4"),
+    "social_1x1": dict(
+        res=(1080,1080), fps=30, container='MPEG4', codec='H264',
+        crf='HIGH', speed='BEST', gop=30, bframes=0,
+        acodec='AAC', abitrate=192, stamp=False,
+        path="//08_deliver/shot010_v012_1x1.mp4"),
+    "youtube_4k": dict(
+        res=(3840,2160), fps=24, container='MPEG4', codec='H264',
+        crf='PERC_LOSSLESS', speed='BEST', gop=12, bframes=2,
+        acodec='AAC', abitrate=384, stamp=False,
+        path="//08_deliver/shot010_v012_yt4k.mp4"),
+    "broadcast_dnxhd": dict(
+        res=(1920,1080), fps=25, container='QUICKTIME', codec='DNXHD',
+        crf='NONE', speed='BEST', gop=1, bframes=0, bitrate=145000,
+        acodec='PCM', abitrate=0, stamp=False,
+        path="//08_deliver/shot010_v012_DNxHD145.mov"),
+    # image-sequence outputs
+    "png16_for_ffmpeg": dict(image_seq='PNG16', res=(1920,1080), fps=24,
+        path="//06_comp/png16/shot010_####"),
+    "exr_master": dict(image_seq='EXR', res=(1920,1080), fps=24,
+        path="//05_renders/shot010/exr/shot010_####"),
+}
+
+def apply_preset(name, scene=None):
+    p = PRESETS[name]
+    scene = scene or bpy.context.scene
+    r = scene.render
+    r.resolution_x, r.resolution_y = p["res"]
+    r.resolution_percentage = 100
+    r.fps, r.fps_base = p["fps"], 1.0
+    r.filepath = p["path"]
+    r.use_file_extension = True
+
+    if p.get("image_seq") == 'EXR':
+        im = r.image_settings
+        im.file_format, im.color_mode = 'OPEN_EXR_MULTILAYER', 'RGBA'
+        im.color_depth, im.exr_codec = '32', 'ZIP'
+        im.color_management = 'OVERRIDE'
+        im.view_settings.view_transform, im.view_settings.look = 'Standard', 'None'
+        return
+    if p.get("image_seq") == 'PNG16':
+        im = r.image_settings
+        im.file_format, im.color_mode = 'PNG', 'RGB'
+        im.color_depth, im.compression = '16', 15
+        im.color_management = 'FOLLOW_SCENE'
+        r.dither_intensity = 1.0
+        return
+
+    r.image_settings.file_format = 'FFMPEG'
+    f = r.ffmpeg
+    f.format = p["container"]
+    f.codec  = p["codec"]
+    f.constant_rate_factor = p["crf"]
+    f.ffmpeg_preset = p["speed"]          # BEST | GOOD | REALTIME
+    f.gopsize = p["gop"]
+    f.use_max_b_frames = bool(p["bframes"])
+    if p["bframes"]:
+        f.max_b_frames = p["bframes"]
+    if p.get("bitrate"):
+        f.video_bitrate = p["bitrate"]
+        f.maxrate = int(p["bitrate"] * 1.2)
+        f.buffersize = p["bitrate"] * 2
+    f.audio_codec = p["acodec"]
+    if p["abitrate"]:
+        f.audio_bitrate = p["abitrate"]
+    f.audio_mixrate = 48000
+    f.audio_channels = 'STEREO'
+
+    r.use_stamp = p["stamp"]
+    if p["stamp"]:
+        for a in ("use_stamp_frame", "use_stamp_filename", "use_stamp_date",
+                  "use_stamp_render_time", "use_stamp_note", "use_stamp_labels"):
+            setattr(r, a, True)
+        r.stamp_note_text = "SHOT010 v012 — REVIEW ONLY — NOT FOR DELIVERY"
+        r.stamp_font_size = 22
+        r.stamp_background = (0.0, 0.0, 0.0, 0.55)
+
+    print(f"[encode] '{name}' -> {p['res'][0]}x{p['res'][1]} @{p['fps']} "
+          f"{p['codec']}/{p['crf']} -> {p['path']}")
+    if p["container"] == 'MPEG4':
+        print("[encode] NOTE: Blender writes no +faststart. Re-mux before "
+              "sending a link:  ffmpeg -i in.mp4 -c copy -movflags +faststart out.mp4")
+
+if __name__ == "__main__":
+    apply_preset("review")
+```
+
+---
+
+## 7. Deliverables and aspect variants
+
+### 7.1 The three aspects, and the one render that feeds them
+
+You will be asked for **16:9, 1:1 and 9:16**. Re-rendering three times triples your render bill for no reason. Plan the framing once.
+
+**The math.** Crop a 9:16 out of a 16:9 frame using the full height:
+
+| Master render | 16:9 out | 1:1 out (full height) | 9:16 out (full height) |
+|---|---|---|---|
+| 1920×1080 | 1920×1080 ✓ | 1080×1080 ✓ | **608×1080** ✗ (below 1080×1920) |
+| **3840×2160 (4K)** | 3840×2160 ✓ | 2160×2160 ✓ | **1215×2160** ✓ (upscale 1.11× to 1080×1920 — fine) |
+| 4096×2304 | ✓ | ✓ | 1296×2304 ✓ |
+
+**So: master at 4K 16:9 (3840×2160) minimum if you owe a vertical.** From 1080p you cannot produce a legitimate 1080×1920 crop; the 608 px of usable width would need a 1.78× upscale.
+
+**Better still — the open-matte master.** Render *taller* than 16:9 so the vertical crop has real headroom:
+
+- Master: **2560×2560** (1:1) or **2304×3072**. Extract 16:9 by cropping the top/bottom, 9:16 by cropping the sides, 1:1 straight out.
+- Cost: ~1.4–1.8× the pixels of a 4K 16:9 render. Cheaper than three renders.
+
+**Framing rules to make it work:**
+
+1. Set up the shot in the **16:9** camera, then add **two more cameras** (or one camera with a passepartout guide) and check the composition in all three before you render a single frame.
+2. Keep the **bottle's vertical axis on or near the frame centre**, and never put critical product detail (label, cap) outside the central **56.25%** width band (`9/16` of the width). That band is your 9:16 safe zone.
+3. Keep the splash **wide** (it can leave the 9:16 crop, that's fine — a splash cropping off frame reads as energy) but keep the **impact point** inside the vertical band.
+4. Reserve **vertical headroom** above the bottle. 9:16 has 1.78× the relative height of 16:9; if the bottle fills the 16:9 frame top to bottom, the 9:16 crop will feel cramped and you'll have nowhere to put the endcard lockup.
+5. **Backdrop must extend past every crop.** A gradient that stops just outside the 16:9 frame will show a hard edge in the taller crop.
+6. **Enable the camera's Passepartout guides** and use `camera.data.show_safe_areas` (see below) to visualise the crops live.
+
+### 7.2 Safe areas
+
+| Area | Inset from each edge | What goes here |
+|---|---|---|
+| **Action safe** | ~3.5% (Blender default `0.035`) | Anything the viewer must see happen |
+| **Title safe** | ~10% horizontal / 5% vertical (Blender default `0.1, 0.05`) | All text, logo, legal line, price, URL |
+| **Social UI safe (9:16)** | **top 14%, bottom 20%, right 12%** | *Nothing.* TikTok/Reels UI (captions, username, buttons, progress bar) sits here |
+
+That last row is the one people forget. On a 1080×1920 Reel, the bottom ~380 px is covered by the caption and CTA, and the right ~130 px by the action rail. Put your endcard lockup in the **middle third** or it will be behind a follow button.
+
+```python
+sc = bpy.context.scene
+sc.safe_areas.action = (0.035, 0.035)
+sc.safe_areas.title  = (0.100, 0.050)
+sc.safe_areas.action_center = (0.150, 0.050)   # 4:3 centre-cut, legacy broadcast
+sc.safe_areas.title_center  = (0.175, 0.050)
+for cam in (o for o in sc.objects if o.type == 'CAMERA'):
+    cam.data.show_safe_areas = True
+    cam.data.show_safe_center = True
+    cam.data.show_passepartout = True
+    cam.data.passepartout_alpha = 0.9
+```
+
+### 7.3 Resolution and frame rate
+
+| Deliverable | Resolution | FPS | Codec |
+|---|---|---|---|
+| Master (archive) | 3840×2160 or open-matte 2560×2560 | render fps | Multilayer EXR sequence |
+| Broadcast/agency mezzanine | 1920×1080 | **25** (PAL) / 29.97 (NTSC) | ProRes 422 HQ |
+| YouTube | 3840×2160 | 24 | H.264 CRF 16 |
+| Web / site hero | 1920×1080 | 24 or 30 | H.264 CRF 20, faststart, often muted-autoplay so **must work silent** |
+| Instagram Reels / TikTok | 1080×1920 | 30 | H.264 CRF 18, −14 LUFS |
+| Instagram feed square | 1080×1080 | 30 | H.264 CRF 18 |
+| Client review | 1920×1080 | 24 | H.264 CRF 22 + burn-in |
+| Stills pack | 3840×2160 | — | 16-bit PNG + sRGB JPEG q95 |
+
+**Frame rate choice:**
+- **24 fps** — cinematic, the default for a premium product ad. Splash motion blur at a 180° shutter looks great.
+- **25 fps** — mandatory for EU broadcast delivery. If broadcast is even *possible*, work at 25 from the start; retiming 24→25 later is a real cost.
+- **30 fps** — smoother, reads slightly more "commercial/energetic", and is the native rate of most social feeds.
+- **60 fps** — only as a *source* for slow-mo (§5.4). Delivering 60 fps doubles your render bill for a look most viewers read as "video, not film".
+
+**Never mix.** Pick one master rate, render everything at it, retime in the edit.
+
+---

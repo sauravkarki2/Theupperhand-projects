@@ -1561,3 +1561,382 @@ blender -b scene.blend -E CYCLES -o //render/bev_shot01/bev_ -F PNG -x 1 -s 1 -e
 blender -b scene.blend -o //render/bev_shot01/bev_ -F PNG -f 163
 ```
 
+---
+
+## 12. Render settings presets
+
+### 12.1 The table
+
+| # | Setting | RNA | **(a) FAST LOOK-DEV** | **(b) FINAL BEAUTY** |
+|---|---|---|---|---|
+| 1 | Engine | `render.engine` | `CYCLES` (or `BLENDER_EEVEE` for blocking) | `CYCLES` |
+| 2 | Device | `cycles.device` | `GPU` | `GPU` |
+| 3 | Feature Set | `cycles.feature_set` | `SUPPORTED` | `SUPPORTED` |
+| 4 | Max Samples | `cycles.samples` | **128** | **1536** |
+| 5 | Adaptive Sampling | `cycles.use_adaptive_sampling` | True | True |
+| 6 | Noise Threshold | `cycles.adaptive_threshold` | **0.05** | **0.0035** |
+| 7 | Min Samples | `cycles.adaptive_min_samples` | 0 | 0 |
+| 8 | Time Limit | `cycles.time_limit` | **25 s** | 0 |
+| 9 | Animated Seed | `cycles.use_animated_seed` | True | **True** |
+| 10 | Light Tree | `cycles.use_light_tree` | True | True |
+| 11 | Denoise | `cycles.use_denoising` | True | True (or off + comp) |
+| 12 | Denoiser | `cycles.denoiser` | `OPTIX` | **`OPENIMAGEDENOISE`** |
+| 13 | Denoise passes | `cycles.denoising_input_passes` | `RGB_ALBEDO_NORMAL` | `RGB_ALBEDO_NORMAL` |
+| 14 | Denoise prefilter | `cycles.denoising_prefilter` | `FAST` | **`ACCURATE`** |
+| 15 | Total bounces | `cycles.max_bounces` | **12** | **32** |
+| 16 | Diffuse | `cycles.diffuse_bounces` | 2 | 4 |
+| 17 | Glossy | `cycles.glossy_bounces` | 4 | **10** |
+| 18 | **Transmission** | `cycles.transmission_bounces` | **8** | **20** |
+| 19 | Volume | `cycles.volume_bounces` | 0 | 2 |
+| 20 | Transparent | `cycles.transparent_max_bounces` | 8 | **16** |
+| 21 | Clamp Direct | `cycles.sample_clamp_direct` | 0.0 | **0.0** |
+| 22 | Clamp Indirect | `cycles.sample_clamp_indirect` | 10.0 | **10.0** |
+| 23 | Filter Glossy | `cycles.blur_glossy` | 1.0 | **0.5** |
+| 24 | Reflective caustics | `cycles.caustics_reflective` | False | **True** |
+| 25 | Refractive caustics | `cycles.caustics_refractive` | False | **True** |
+| 26 | Fast GI | `cycles.use_fast_gi` | **True**, `REPLACE`, AO bounces 1 | **False** |
+| 27 | Motion Blur | `render.use_motion_blur` | **False** | **True** |
+| 28 | Shutter | `render.motion_blur_shutter` | — | **0.5** |
+| 29 | MB Position | `cycles.motion_blur_position` | — | `CENTER` |
+| 30 | Rolling shutter | `cycles.rolling_shutter_type` | `NONE` | `NONE` |
+| 31 | Persistent Data | `render.use_persistent_data` | False | **True** |
+| 32 | Auto Tile / size | `cycles.use_auto_tile`, `tile_size` | True / 2048 | True / **2048** (1024 if VRAM-tight) |
+| 33 | Simplify | `render.use_simplify` | **True**, subdiv 1, tex limit 2048 | False |
+| 34 | Resolution % | `render.resolution_percentage` | **50** | **100** |
+| 35 | Resolution | `render.resolution_x/y` | 1920×1080 | 1920×1080 (or 3840×2160) |
+| 36 | Film filter width | `render.filter_width` | 1.5 | 1.5 |
+| 37 | Film transparent | `render.film_transparent` | False | False |
+| 38 | View transform | `view_settings.view_transform` | Filmic (3.6) / AgX (4.x) | same, decided in §10 |
+| 39 | Look | `view_settings.look` | `Medium High Contrast` | `Punchy` / `Medium High Contrast` |
+| 40 | Format | `image_settings.file_format` | `PNG`, 8-bit | **`OPEN_EXR_MULTILAYER`** 16f DWAA, or PNG 16-bit |
+| 41 | Frame range | `frame_start/end` | 150–175 (a test slice) | 1–250 |
+| 42 | Approx. time/frame | — | **~8–25 s** | **~2–6 min** @1080p on an RTX-class GPU |
+
+### 12.2 `bpy` — apply either preset
+
+```python
+# ============================================================================
+# 03_render_presets.py
+#   apply_preset("lookdev")   -> fast iteration
+#   apply_preset("final")     -> beauty pass
+# Blender 3.6 LTS; guarded for 4.0 / 4.2 / 4.5.
+# ============================================================================
+import bpy
+
+def _set(obj, attr, value):
+    """Set only if the property exists on this Blender version."""
+    if hasattr(obj, attr):
+        try:
+            setattr(obj, attr, value)
+            return True
+        except Exception as e:
+            print("  ! could not set %s = %r (%s)" % (attr, value, e))
+    else:
+        print("  - skipped %s (not in Blender %s)"
+              % (attr, ".".join(str(v) for v in bpy.app.version)))
+    return False
+
+def setup_gpu(backend='OPTIX'):
+    prefs = bpy.context.preferences.addons['cycles'].preferences
+    _set(prefs, "compute_device_type", backend)
+    try:
+        prefs.get_devices()
+    except Exception:
+        pass
+    for d in prefs.devices:
+        d.use = (d.type != 'CPU')
+    print("GPU backend:", backend,
+          "| enabled:", [d.name for d in prefs.devices if d.use])
+
+def set_color_management(match_36_tutorial=False):
+    vs = bpy.context.scene.view_settings
+    if match_36_tutorial:
+        # Reproduce a Blender 3.6 tutorial's look on ANY version.
+        for tf in ("Filmic",):
+            try:
+                vs.view_transform = tf
+                break
+            except Exception:
+                pass
+        for lk in ("Filmic - Medium High Contrast", "Medium High Contrast",
+                   "AgX - Medium High Contrast", "None"):
+            try:
+                vs.look = lk
+                break
+            except Exception:
+                continue
+    else:
+        # Modern default: AgX (4.x) or Filmic (3.6), punchy.
+        for tf in ("AgX", "Filmic"):
+            try:
+                vs.view_transform = tf
+                break
+            except Exception:
+                continue
+        for lk in ("AgX - Punchy", "Punchy",
+                   "Filmic - Medium High Contrast", "Medium High Contrast", "None"):
+            try:
+                vs.look = lk
+                break
+            except Exception:
+                continue
+    vs.exposure = 0.0
+    vs.gamma    = 1.0
+    print("View transform:", vs.view_transform, "| Look:", vs.look)
+
+def apply_preset(mode="final", out_dir="//render/bev_shot01/", basename="bev_"):
+    scn, r, c = bpy.context.scene, bpy.context.scene.render, bpy.context.scene.cycles
+    r.engine = 'CYCLES'
+    _set(c, "device", 'GPU')
+    _set(c, "feature_set", 'SUPPORTED')
+    _set(c, "use_adaptive_sampling", True)
+    _set(c, "adaptive_min_samples", 0)
+    _set(c, "use_animated_seed", True)
+    _set(c, "use_light_tree", True)                      # 3.5+
+    _set(c, "use_denoising", True)
+    _set(c, "denoising_input_passes", 'RGB_ALBEDO_NORMAL')
+    _set(c, "use_auto_tile", True)
+    _set(c, "tile_size", 2048)
+    _set(c, "pixel_filter_type", 'BLACKMAN_HARRIS')
+    _set(r, "filter_width", 1.5)
+    _set(r, "film_transparent", False)
+    _set(c, "sample_clamp_direct", 0.0)
+    _set(c, "sample_clamp_indirect", 10.0)
+    _set(c, "rolling_shutter_type", 'NONE')
+    _set(c, "motion_blur_position", 'CENTER')
+    r.resolution_x, r.resolution_y = 1920, 1080
+    r.fps = 25
+
+    if mode == "lookdev":
+        _set(c, "samples", 128)
+        _set(c, "adaptive_threshold", 0.05)
+        _set(c, "time_limit", 25.0)
+        _set(c, "denoiser", 'OPTIX')
+        _set(c, "denoising_prefilter", 'FAST')
+        _set(c, "max_bounces", 12)
+        _set(c, "diffuse_bounces", 2)
+        _set(c, "glossy_bounces", 4)
+        _set(c, "transmission_bounces", 8)
+        _set(c, "volume_bounces", 0)
+        _set(c, "transparent_max_bounces", 8)
+        _set(c, "blur_glossy", 1.0)
+        _set(c, "caustics_reflective", False)
+        _set(c, "caustics_refractive", False)
+        _set(c, "use_fast_gi", True)
+        _set(c, "fast_gi_method", 'REPLACE')
+        _set(c, "ao_bounces_render", 1)
+        _set(r, "use_motion_blur", False)
+        _set(r, "use_persistent_data", False)
+        _set(r, "use_simplify", True)
+        _set(r, "simplify_subdivision", 1)
+        _set(c, "texture_limit", '2048')
+        r.resolution_percentage = 50
+        r.image_settings.file_format = 'PNG'
+        r.image_settings.color_mode  = 'RGBA'
+        r.image_settings.color_depth = '8'
+        r.image_settings.compression = 15
+        scn.frame_start, scn.frame_end = 150, 175        # a slice around the hero beat
+        r.filepath = out_dir.rstrip('/') + "_LD/" + basename
+
+    elif mode == "final":
+        _set(c, "samples", 1536)
+        _set(c, "adaptive_threshold", 0.0035)
+        _set(c, "time_limit", 0.0)
+        _set(c, "denoiser", 'OPENIMAGEDENOISE')
+        _set(c, "denoising_prefilter", 'ACCURATE')
+        _set(c, "denoising_use_gpu", True)               # 4.0+ only
+        _set(c, "max_bounces", 32)
+        _set(c, "diffuse_bounces", 4)
+        _set(c, "glossy_bounces", 10)
+        _set(c, "transmission_bounces", 20)              # <-- the splash setting
+        _set(c, "volume_bounces", 2)
+        _set(c, "transparent_max_bounces", 16)
+        _set(c, "blur_glossy", 0.5)
+        _set(c, "caustics_reflective", True)
+        _set(c, "caustics_refractive", True)
+        _set(c, "use_fast_gi", False)
+        _set(r, "use_motion_blur", True)
+        _set(r, "motion_blur_shutter", 0.5)              # 180-degree shutter
+        _set(r, "use_persistent_data", True)
+        _set(r, "use_simplify", False)
+        _set(c, "texture_limit_render", 'OFF')
+        r.resolution_percentage = 100
+        # --- Multilayer EXR (recommended) ---
+        r.image_settings.file_format = 'OPEN_EXR_MULTILAYER'
+        r.image_settings.color_mode  = 'RGBA'
+        r.image_settings.color_depth = '16'              # half float
+        _set(r.image_settings, "exr_codec", 'DWAA')
+        # --- or 16-bit PNG instead: -------------------
+        # r.image_settings.file_format = 'PNG'
+        # r.image_settings.color_depth = '16'
+        # r.image_settings.compression = 15
+        scn.frame_start, scn.frame_end = 1, 250
+        r.filepath = out_dir + basename
+
+        # Passes worth having on a final animation:
+        vl = bpy.context.view_layer
+        _set(vl.cycles, "denoising_store_passes", True)  # re-denoise in comp later
+        _set(vl, "use_pass_z", True)
+        _set(vl, "use_pass_combined", True)
+        # Vector pass is INCOMPATIBLE with render motion blur - only for the
+        # comp-blur workflow (see 7.5):
+        # r.use_motion_blur = False; vl.use_pass_vector = True
+    else:
+        raise ValueError("mode must be 'lookdev' or 'final'")
+
+    r.use_file_extension = True
+    r.use_overwrite      = False
+    r.use_placeholder    = True
+    print("Applied preset:", mode, "->", r.filepath)
+
+# ---------------------------------------------------------------------------
+setup_gpu('OPTIX')                 # 'CUDA' | 'HIP' | 'METAL' | 'ONEAPI'
+set_color_management(match_36_tutorial=False)
+apply_preset("final")
+```
+
+---
+
+## 13. Troubleshooting
+
+### 13.1 The splash renders dark / grey / black instead of silver-white
+
+| Cause | Fix |
+|---|---|
+| **Nothing bright for it to reflect** (most common) | Add the big white emission cards of §1.6, or an HDRI at 0.5–1.0. Water has no diffuse colour: it can only show you what surrounds it. |
+| **Transmission bounces exhausted** | Raise `transmission_bounces` to 16–24. Black *patches* with hard edges = this, every time. |
+| Water card visibility misconfigured | If you turned Glossy/Transmission visibility off on the cards along with Diffuse, the water can't see them. Only Diffuse + Camera should be off. |
+| Backdrop too bright relative to the water cards | The splash is dark **by comparison**. Raise card emission to 6–8 or drop backdrop emission. |
+| Normals flipped / non-manifold fluid mesh | The IOR interface is inverted; the shader reads as opaque. Recalculate normals; check *Use Fractions* on the domain. |
+| Material IOR / roughness | Out of scope here, but if the *whole* splash is uniformly grey and lighting changes do nothing, it's the shader, not the rig. |
+| Light Linking excluded it (4.x) | Check the water objects are actually in the receiver collection. |
+
+### 13.2 Fireflies in the water
+
+In priority order:
+1. **`adaptive_threshold` 0.0035 + `samples` 1536.** Most "fireflies" are just under-sampling.
+2. **Filter Glossy `blur_glossy = 0.5`.**
+3. **Enlarge small bright sources.** A 0.02 m light focused by a droplet is a firefly factory;
+   the same power in a 0.12 m strip is not.
+4. **`sample_clamp_indirect = 10`** (default). Lower to 5 only if desperate.
+5. **Never `sample_clamp_direct`** — it kills the strip-light highlights that define the shot.
+6. Turn off **Reflective/Refractive caustics** for a lookdev pass to confirm the fireflies are
+   caustics; if they are, decide whether you want them (they're pretty) or not.
+7. `light.cycles.max_bounces = 0` on the strips: removes their entire indirect contribution
+   and with it a whole class of firefly paths.
+8. Check for a stray tiny emissive face in the fluid or a mesh light hidden inside geometry.
+
+### 13.3 Noisy / blotchy caustics under the bottle
+
+- Caustics are the hardest paths to sample. Brute force: samples up, threshold down.
+- **Filter Glossy 0.5–1.0** blurs them cheaply — usually invisible and hugely effective.
+- Try **Shadow Caustics (MNEE)** with a *small* dedicated light (§2.5) instead of brute force.
+- Make the light physically larger — a bigger source produces a softer, lower-variance caustic.
+- Last resort: `caustics_refractive = False` and paint the amber pool with a spot light
+  carrying a gradient texture. This is what many commercial artists actually ship.
+
+### 13.4 DOF is destroying the splash detail
+
+- Stop down: **f/4 → f/5.6 or f/8**. See the DOF table in §5.4.
+- **Move the camera back and use a longer lens** to keep the same framing with more depth:
+  135 mm at 2.7 m has slightly *less* DOF than 100 mm at 2.0 m for the same framing, so go the
+  other way — **85 mm at 1.7 m** gives noticeably more depth at the same f-stop and framing.
+- Put the focus target on the *splash crown* rather than the label for the splash-impact
+  frames, and keyframe it back to the label after.
+- Do a **DOF-off render + Z pass** and defocus in comp for the client WIP; real DOF for finals.
+- Raise samples: defocused bright speculars need *far* more samples than sharp ones. A DOF
+  render at the same threshold takes ~1.5–2× longer for the same visual noise.
+
+### 13.5 Render times exploding
+
+Diagnose in this order:
+
+| Check | Typical culprit |
+|---|---|
+| Turn off motion blur → time drops >40 % | Deformation motion blur on the fluid mesh; reduce `motion_steps` to 1, or use Vector-pass blur for WIP |
+| Turn off DOF → time drops >30 % | Aperture too wide for the sample count; stop down or raise samples/threshold together |
+| Set `transmission_bounces` to 4 → time drops a lot | You over-raised it; find the minimum that removes black, not a round number like 64 |
+| Disable caustics → big drop | Caustic paths; use Filter Glossy or MNEE |
+| Enable **Persistent Data** → big drop between frames | You forgot it. This is often the single largest animation win. |
+| Volume shaders present | `volume_bounces`, volume step size — volumetrics in a splash are brutally expensive |
+| HDRI at 8K/16K | Downsize to 2K–4K; an env map that doesn't fill the frame doesn't need 16K |
+| `use_fast_gi` for WIP | 20–40 % off lookdev frames |
+| Adaptive threshold too low | 0.0035 → 0.005 is usually invisible and 25–35 % faster |
+
+### 13.6 Out of VRAM on a big fluid mesh
+
+Symptom: `CUDA error: out of memory` / `System is out of GPU memory`, usually mid-sequence when
+the splash peaks.
+
+| Fix | Cost |
+|---|---|
+| **Lower Domain Resolution Divisions** (e.g. 256 → 192) or **Mesh Upres Factor** | Less detail, but a 25 % resolution drop is ~2× fewer mesh triangles |
+| Raise **Mesh → Particle Radius**, lower **Concavity Upper/Lower** | Coarser but far lighter mesh |
+| `cycles.tile_size` 2048 → **1024 or 512** | Slightly slower; big peak-VRAM saving |
+| Turn **Persistent Data OFF** | Slower per frame, but frees the resident BVH |
+| `ob.cycles.motion_steps = 1` on the fluid | Motion blur memory scales with steps |
+| **Simplify → Texture Limit (render)** 4096/2048 | Reduces texture VRAM |
+| Turn off `use_deform_motion` on non-deforming objects | |
+| Disable motion blur on the backdrop/cards | |
+| Reduce HDRI resolution | Env maps live in VRAM |
+| Hide off-camera geometry entirely (`ob.hide_render = True`) | The cards are camera-invisible but still resident; delete unused ones |
+| Fall back to **CPU** for the worst frames, or render those frames on a bigger GPU | Slow but it finishes |
+| NVIDIA only: system-memory fallback lets CUDA/OptiX spill to host RAM — **massively** slower but avoids an outright failure. Verify it's active rather than relying on it. | |
+
+### 13.7 Quick symptom index
+
+| You see | Go to |
+|---|---|
+| Splash is sharp and strobes | §7.4 — Speed Vectors |
+| Black core inside the bottle | §8.4 — transmission bounces |
+| Splash shadow is solid black | §8.4 — `transparent_max_bounces` |
+| Bright rectangle floating in the backdrop | §2.4 — object camera visibility on a light/card |
+| Orange looks pale/sandy vs the tutorial | §10.3 — AgX vs Filmic |
+| Whole image milky and low contrast | §4.2 — backdrop emission too high, or Filmic without a Look |
+| Vertical bottle edges converge | §5.1 — focal length too short |
+| Noise "boils" between frames | §8.3 — denoiser temporal instability |
+| Reflections vanish at the frame edge | §9.2 — you're in EEVEE; screen-space limitation |
+| Light changes brightness when you scale it (4.5) | `light.normalize` |
+
+---
+
+## 14. Version-difference quick reference
+
+| Topic | 3.6 LTS | 4.0 | 4.2 LTS | 4.5 |
+|---|---|---|---|---|
+| Default view transform | **Filmic** | **AgX** | AgX (+ Khronos PBR Neutral available) | AgX |
+| Look identifiers | `Filmic - Medium High Contrast` | `AgX - Punchy` etc. | tidied names | tidied names |
+| **Light Linking** | ✗ | **✓** `ob.light_linking.receiver_collection` / `.blocker_collection` | ✓ | ✓ |
+| Light Groups | ✓ (3.2+) | ✓ | ✓ | ✓ |
+| Light Tree | ✓ (3.5+) | ✓ | ✓ | ✓ |
+| Shadow Caustics / MNEE | ✓ (3.4+) | ✓ | ✓ | ✓ |
+| `cycles.denoising_use_gpu` | ✗ | **✓** | ✓ | ✓ |
+| Per-light `use_shadow` | ✗ | ✗ | **✓** | ✓ |
+| `light.normalize` | ✗ | ✗ | ✗ | **✓** |
+| EEVEE | legacy (`use_ssr`, `use_bloom`, `use_gtao`) | legacy | **EEVEE Next** — `use_raytracing`, `ray_tracing_options`, virtual shadow maps, **no `use_bloom`** | EEVEE Next |
+| EEVEE motion blur RNA | `scene.eevee.use_motion_blur` | same | `scene.render.use_motion_blur` | `scene.render.use_motion_blur` |
+| Principled BSDF | v1 | **v2 (rewritten)** — affects glass/water look-dev, not this module | v2 | v2 |
+
+**Rule for any script in this module:** wrap every write in the `_set()` helper from §12.2 so a
+renamed or removed property prints a warning instead of aborting the whole script.
+
+---
+
+## 15. Build order checklist
+
+```
+[ ] 1. Scene units metric, scale 1.0; bottle 0.25 m at origin, base on z=0
+[ ] 2. Run 03_render_presets.py -> apply_preset("lookdev"); set colour management NOW
+        (decide Filmic-match vs AgX before you judge a single light)
+[ ] 3. Run 03_camera.py -> 100 mm, f/4, FOCUS_TGT at (0,0,0.14), CAM_PIVOT
+[ ] 4. Backdrop emission only. Set its level with False Color. (~1.8)
+[ ] 5. Run 03_light_rig.py. Then solo each light: kicker -> key -> strips -> top -> cards
+[ ] 6. Check False Color: label green, backdrop just below, speculars thin yellow/red
+[ ] 7. Fluid domain: Mesh ON, Speed Vectors ON, RE-BAKE the mesh
+[ ] 8. Object motion blur on the fluid: use_motion_blur + use_deform_motion, steps 1
+[ ] 9. Run 03_camera_anim.py; scrub the whole 250 frames in EEVEE for framing/timing
+[ ] 10. Test-render frames 150-175 at 50%, lookdev preset. Fix black patches (transmission).
+[ ] 11. apply_preset("final"); render frames 160-166 at 100% and inspect at 1:1
+[ ] 12. Full range to EXR/PNG sequence, use_overwrite=False + use_placeholder=True
+[ ] 13. Assemble the sequence to video LAST, never render straight to MP4
+```
