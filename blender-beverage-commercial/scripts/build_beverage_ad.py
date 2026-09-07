@@ -780,12 +780,22 @@ def build_emitter_on_curve(curve_obj=None):
     if curve_obj is None:
         curve_obj = bpy.data.objects.get("SPLASH_PATH") or build_spiral_curve()
 
-    bpy.ops.mesh.primitive_uv_sphere_add(
-        segments=16, ring_count=8,
-        radius=CONFIG["emitter_radius"], location=(0, 0, 0),
+    # A DISC, not a sphere. This matters more than it looks: `velocity_normal`
+    # throws liquid along the emitter's face normals. A sphere's normals point in
+    # every direction, so the throw cancels out radially and you get a soft blob
+    # sitting on the curve. A disc's normals all point one way, so you get a
+    # clean directed jet — which is what makes the ribbon read.
+    bpy.ops.mesh.primitive_circle_add(
+        vertices=24, radius=CONFIG["emitter_radius"],
+        fill_type="NGON", location=(0, 0, 0),
     )
     emitter = bpy.context.object
     emitter.name = "SPLASH_EMITTER"
+    # Face the disc outward (local +X) so that, once Follow Path aligns local +Y
+    # to the curve tangent, the throw is radial rather than along the direction
+    # of travel. If the jet fires inward on the first bake, negate
+    # CONFIG["emitter_velocity_normal"] rather than re-rotating the mesh.
+    emitter.rotation_euler = Euler((0.0, math.radians(90.0), 0.0))
     move_to_collection(emitter, "SIM")
     emitter.display_type = "WIRE"
     _set(emitter, "hide_render", True, "SPLASH_EMITTER")

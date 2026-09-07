@@ -35,10 +35,17 @@ These are the values the artist actually shipped. Everything in this module is a
 | Liquid | Narrow Band Width | **3.000** |
 | Liquid | Fractional Obstacles | checkbox — Obstacle Distance **0.500** |
 
-Everything above except `Border Collisions` is **stock Blender default**. That is the single most useful fact
-in this document: the artist did not tune the solver. He tuned **the domain size, the emitter animation, and
-the force fields**, and left the physics alone. That is the correct order of effort for an ad splash, and this
-module is weighted accordingly.
+**Exactly two things were changed from stock Blender defaults: `Resolution Divisions` (32 → 100) and
+`Border Collisions` (all on → all off).** Every other value in the table above is the default a fresh
+Mantaflow liquid domain ships with.
+
+That is the single most useful fact in this document. The artist did not tune the solver. One change opened
+the domain, one change set the working resolution, and everything else that makes the shot was done with
+**domain size, emitter animation, and force fields** — the physics was left alone.
+
+This is the correct order of effort for an ad splash, and this module is weighted accordingly: the solver
+sections exist so you understand what the defaults are doing and when to deviate, not because you should
+start by turning knobs. If your splash is the wrong shape, the fix is almost never in this panel.
 
 ---
 
@@ -1144,3 +1151,463 @@ context handling and any *shading* scripts need attention. Do not go hunting for
 are none worth mentioning.
 
 ---
+
+## 15. Python — copy-pasteable bpy
+
+All snippets target **Blender 3.6 through 4.x**. Fluid settings live on
+`modifier.domain_settings` / `modifier.flow_settings` / `modifier.effector_settings`.
+
+Two rules that save an hour:
+- **Apply scale before every bake.** The helper below does it.
+- **Bake operators are job operators.** Running them from the Text Editor launches a background job and returns
+  immediately. For a deterministic script bake, run headless: `blender -b hero.blend -P bake.py`.
+
+### 15.1 Helpers
+
+```python
+import bpy, math
+from mathutils import Vector
+
+def apply_scale(obj):
+    """Mantaflow assumes unit scale. Call this on every domain, flow, effector and curve."""
+    bpy.ops.object.select_all(action='DESELECT')
+    obj.select_set(True)
+    bpy.context.view_layer.objects.active = obj
+    bpy.ops.object.transform_apply(location=False, rotation=False, scale=True)
+    obj.select_set(False)
+
+def add_fluid_modifier(obj, fluid_type):
+    """fluid_type in {'DOMAIN', 'FLOW', 'EFFECTOR'}. Returns the modifier."""
+    bpy.context.view_layer.objects.active = obj
+    mod = obj.modifiers.get("Fluid")
+    if mod is None:
+        bpy.ops.object.modifier_add(type='FLUID')
+        mod = obj.modifiers["Fluid"]
+    mod.fluid_type = fluid_type
+    return mod
+
+def try_enum(owner, prop, candidates):
+    """Set an enum whose identifier differs across Blender builds."""
+    for ident in candidates:
+        try:
+            setattr(owner, prop, ident)
+            return ident
+        except TypeError:
+            continue
+    return None
+```
+
+### 15.2 Create the domain and set every screenshot value
+
+```python
+BOTTLE_HEIGHT = 0.25          # metres - drives the whole physical scale
+DOM_XY        = 0.80
+DOM_Z         = 1.30
+FRAME_START, FRAME_END = 1, 90
+
+# --- domain object: a plain cube, unit scale, no rotation -------------------
+bpy.ops.mesh.primitive_cube_add(size=2.0, location=(0.0, 0.0, DOM_Z * 0.5 - 0.1))
+dom = bpy.context.active_object
+dom.name = "FluidDomain"
+dom.scale = (DOM_XY * 0.5, DOM_XY * 0.5, DOM_Z * 0.5)
+apply_scale(dom)                          # <-- non-negotiable
+dom.rotation_euler = (0.0, 0.0, 0.0)
+dom.display_type = 'BOUNDS'
+dom.hide_render = True
+
+mod = add_fluid_modifier(dom, 'DOMAIN')
+ds  = mod.domain_settings
+ds.domain_type = 'LIQUID'                 # set FIRST - it resets dependent defaults
+
+# --- Settings panel (screenshot values) ------------------------------------
+ds.resolution_max         = 100           # PREVIEW value. 200/300/400 for final
+ds.time_scale             = 1.0
+ds.cfl_condition          = 4.0
+ds.use_adaptive_timesteps = True
+ds.timesteps_max          = 4
+ds.timesteps_min          = 1
+ds.gravity                = (0.0, 0.0, -9.81)
+ds.delete_in_obstacle     = True          # ON, because we use a closed proxy collider
+
+# --- Border Collisions: OPEN DOMAIN (all off) ------------------------------
+ds.use_collision_border_front  = False
+ds.use_collision_border_back   = False
+ds.use_collision_border_left   = False
+ds.use_collision_border_right  = False
+ds.use_collision_border_top    = False
+ds.use_collision_border_bottom = False
+
+# --- Liquid panel (screenshot values) --------------------------------------
+ds.simulation_method    = 'FLIP'
+ds.flip_ratio           = 0.97            # splashiness. 0.90 damped .. 0.99 wild
+ds.sys_particle_maximum = 0               # 0 = unlimited
+ds.particle_radius      = 1.0
+ds.particle_number      = 2               # "Sampling"
+ds.particle_randomness  = 0.1
+ds.particle_max         = 16
+ds.particle_min         = 8
+ds.particle_band_width  = 3.0             # "Narrow Band Width"
+ds.use_fractions        = True            # "Fractional Obstacles" - ON for products
+ds.fractions_distance   = 0.5             # "Obstacle Distance"
+
+# --- Cache -----------------------------------------------------------------
+ds.cache_type        = 'MODULAR'          # NEVER 'REPLAY' for production
+ds.cache_directory   = "//cache_fluid_hero/"
+ds.cache_frame_start = FRAME_START
+ds.cache_frame_end   = FRAME_END
+ds.cache_resumable   = True
+ds.cache_data_format = 'OPENVDB'
+try_enum(ds, "openvdb_data_depth", ("16", "HALF"))   # half float halves the cache
+
+# --- Mesh (the surface that actually renders) ------------------------------
+ds.use_mesh              = True
+ds.mesh_generator        = 'IMPROVED'
+ds.mesh_scale            = 2              # "Upres Factor" - cheapest quality in Blender
+ds.mesh_particle_radius  = 2.0            # blobbiness. 1.6-2.0 for a splash
+ds.mesh_smoothen_pos     = 1
+ds.mesh_smoothen_neg     = 1
+ds.mesh_concave_upper    = 3.5
+ds.mesh_concave_lower    = 0.4
+ds.use_speed_vectors     = True           # required for vector motion blur
+
+bpy.context.scene.frame_start = FRAME_START
+bpy.context.scene.frame_end   = FRAME_END
+bpy.context.scene.render.use_motion_blur = True
+```
+
+### 15.3 Curve-guided inflow emitter (the headline technique)
+
+```python
+import bpy, math
+
+TURNS       = 1.35        # how far round the bottle the ribbon wraps
+RADIUS      = 0.12        # metres from the bottle axis
+Z_START     = 0.05
+Z_END       = 0.32
+POINTS      = 10
+
+# --- 1. build the rising spiral as a Bezier curve --------------------------
+cu = bpy.data.curves.new("SplashPath", 'CURVE')
+cu.dimensions   = '3D'
+cu.resolution_u = 32           # low res here = a stuttering emitter
+cu.use_path     = True
+spl = cu.splines.new('BEZIER')
+spl.bezier_points.add(POINTS - 1)
+for i, bp in enumerate(spl.bezier_points):
+    t = i / (POINTS - 1)
+    a = t * TURNS * 2.0 * math.pi
+    bp.co = (RADIUS * math.cos(a), RADIUS * math.sin(a), Z_START + t * (Z_END - Z_START))
+    bp.handle_left_type = bp.handle_right_type = 'AUTO'
+path = bpy.data.objects.new("SplashPath", cu)
+bpy.context.collection.objects.link(path)
+path.hide_render = True
+apply_scale(path)
+
+# --- 2. the emitter: a disc whose normal points along +Y -------------------
+bpy.ops.mesh.primitive_circle_add(vertices=16, radius=0.028, fill_type='NGON',
+                                  rotation=(math.radians(90.0), 0.0, 0.0))
+emit = bpy.context.active_object
+emit.name = "SplashEmitter"
+apply_scale(emit)
+emit.location = (0.0, 0.0, 0.0)   # MUST be zero - location offsets from the path
+
+# --- 3. Follow Path constraint --------------------------------------------
+con = emit.constraints.new('FOLLOW_PATH')
+con.target             = path
+con.use_curve_follow   = True      # rotates the emitter tangentially -> normal velocity follows
+con.forward_axis       = 'FORWARD_Y'
+con.up_axis            = 'UP_Z'
+con.use_fixed_location = True      # switches control to offset_factor (0..1)
+
+con.offset_factor = 0.0
+con.keyframe_insert("offset_factor", frame=10)
+con.offset_factor = 1.0
+con.keyframe_insert("offset_factor", frame=40)
+# shape this F-curve by hand in the Graph Editor - linear reads mechanical
+
+# --- 4. make it a liquid inflow -------------------------------------------
+fmod = add_fluid_modifier(emit, 'FLOW')
+fs   = fmod.flow_settings
+fs.flow_type            = 'LIQUID'
+fs.flow_behavior        = 'INFLOW'
+fs.surface_distance     = 1.5      # stream thickness, in voxels
+fs.use_plane_init       = False
+fs.subframes            = 3        # THE fix for beaded/stuttering streams
+fs.use_initial_velocity = True
+fs.velocity_normal      = 3.0      # tangential throw. 2-5 for a wrapping ribbon
+fs.velocity_random      = 0.3
+fs.velocity_coord       = (0.0, 0.0, 1.0)   # world-space loft, does NOT rotate
+
+# --- 5. burst: on for frames 12-34, then ballistic -------------------------
+for frame, state in ((FRAME_START, False), (11, False), (12, True),
+                     (34, True), (35, False)):
+    fs.use_inflow = state
+    fs.keyframe_insert("use_inflow", frame=frame)   # booleans get CONSTANT interp
+```
+
+### 15.4 Force fields + the `forces` collection
+
+```python
+import bpy
+
+forces = bpy.data.collections.new("forces")
+bpy.context.scene.collection.children.link(forces)
+
+def add_field(name, ftype, location, strength, flow=0.0, shape='POINT',
+              falloff='SPHERE', power=1.0, max_dist=None, size=None):
+    bpy.ops.object.effector_add(type=ftype, location=location)
+    ob = bpy.context.active_object
+    ob.name = name
+    f = ob.field
+    f.strength     = strength
+    f.flow         = flow            # velocity target instead of raw acceleration - MUCH safer
+    f.shape        = shape
+    f.falloff_type = falloff
+    f.falloff_power = power
+    if size is not None:
+        f.size = size                # turbulence feature scale
+    if max_dist is not None:
+        f.use_max_distance = True
+        f.distance_max     = max_dist
+    # move into the forces collection
+    for c in list(ob.users_collection):
+        c.objects.unlink(ob)
+    forces.objects.link(ob)
+    return ob
+
+# 1) VORTEX - this is what makes the ribbon WRAP the bottle
+vortex = add_field("F_Vortex", 'VORTEX', (0.0, 0.0, 0.15), strength=7.0, flow=2.0,
+                   shape='LINE', falloff='TUBE', power=1.0, max_dist=0.35)
+
+# 2) NEGATIVE FORCE - pushes water off the glass so it bulges into a crown
+repel  = add_field("F_Repel", 'FORCE', (0.0, 0.0, 0.15), strength=-2.0, flow=1.0,
+                   shape='LINE', falloff='TUBE', power=2.0, max_dist=0.20)
+
+# 3) TURBULENCE - breaks the ribbon into strands and droplets
+turb   = add_field("F_Turbulence", 'TURBULENCE', (0.0, 0.0, 0.25), strength=2.5,
+                   shape='POINT', falloff='SPHERE', power=0.0, max_dist=0.50, size=0.8)
+
+# optional 4th: DRAG for the settle (see the keyframe block below)
+drag   = add_field("F_Drag", 'DRAG', (0.0, 0.0, 0.25), strength=0.0,
+                   shape='POINT', falloff='SPHERE', power=0.0, max_dist=0.60)
+
+# --- restrict the domain to ONLY these fields ------------------------------
+ds.effector_weights.collection = forces
+ds.effector_weights.all        = 1.0
+# per-type multipliers, all keyframable:
+# ds.effector_weights.force / .vortex / .wind / .turbulence / .drag / .gravity
+
+# --- bloom then settle -----------------------------------------------------
+schedule = {
+    #  frame : (vortex, turbulence, drag)
+    10: (0.0, 0.0, 0.0),
+    16: (7.0, 2.5, 0.0),
+    34: (7.0, 2.5, 0.0),
+    46: (1.0, 0.5, 3.0),
+    60: (0.0, 0.0, 4.0),
+}
+for frame, (v, t, d) in schedule.items():
+    vortex.field.strength = v; vortex.field.keyframe_insert("strength", frame=frame)
+    turb.field.strength   = t; turb.field.keyframe_insert("strength",   frame=frame)
+    drag.field.strength   = d; drag.field.keyframe_insert("strength",   frame=frame)
+```
+
+> If you raise any field strength above ~10, also set `ds.cfl_condition = 2.0` and
+> `ds.timesteps_max = 8` or the sim will tunnel and explode.
+
+### 15.5 The bottle as an effector (with a proxy collider)
+
+```python
+bottle_proxy = bpy.data.objects["bottle_collider"]   # closed, ~3k tris, slightly inflated
+apply_scale(bottle_proxy)
+bottle_proxy.hide_render = True
+
+emod = add_fluid_modifier(bottle_proxy, 'EFFECTOR')
+es   = emod.effector_settings
+es.effector_type   = 'COLLISION'
+es.surface_distance = 0.15     # raise to 0.3 if liquid still leaks through
+es.use_plane_init   = False    # False for a closed solid; True for planes/cards
+es.use_effector     = True     # keyframable - turn colliders on/off mid-shot
+es.velocity_factor  = 1.0      # transfers a MOVING product's motion to the fluid
+es.subframes        = 2        # raise for a fast-moving product
+
+# ground / table plane
+bpy.ops.mesh.primitive_plane_add(size=2.0, location=(0.0, 0.0, 0.0))
+ground = bpy.context.active_object
+ground.name = "GroundEffector"
+gmod = add_fluid_modifier(ground, 'EFFECTOR')
+gmod.effector_settings.effector_type    = 'COLLISION'
+gmod.effector_settings.use_plane_init   = True    # planar collider
+gmod.effector_settings.surface_distance = 0.1
+```
+
+### 15.6 Whitewater
+
+```python
+ds.use_spray_particles  = True
+ds.use_foam_particles   = True
+ds.use_bubble_particles = True
+ds.use_tracer_particles = False
+
+ds.particle_scale             = 2          # "Upres Factor" for whitewater
+ds.sndparticle_boundary       = 'DELETE'   # correct for an OPEN domain
+ds.sndparticle_combined_export = 'OFF'     # or 'SPRAY_FOAM_BUBBLE' for one system
+
+# potentials: lower the MIN to get MORE particles
+ds.sndparticle_potential_min_wavecrest  = 0.3
+ds.sndparticle_potential_max_wavecrest  = 2.0
+ds.sndparticle_potential_min_trappedair = 0.3
+ds.sndparticle_potential_max_trappedair = 2.0
+ds.sndparticle_potential_min_energy     = 0.5
+ds.sndparticle_potential_max_energy     = 5.0
+
+# sampling = density. This is the dial to push for an ad.
+ds.sndparticle_sampling_wavecrest  = 200
+ds.sndparticle_sampling_trappedair = 300
+
+ds.sndparticle_bubble_buoyancy = -4.0      # more negative = bubbles rise faster (fizz)
+ds.sndparticle_bubble_drag     = 2.0
+ds.sndparticle_life_min        = 8
+ds.sndparticle_life_max        = 40        # spray that dissipates instead of hanging
+```
+
+Rendering the whitewater particle systems (run AFTER the Particles bake exists):
+
+```python
+import bpy
+
+# one tiny droplet primitive, shared by all three systems
+bpy.ops.mesh.primitive_ico_sphere_add(subdivisions=1, radius=1.0, location=(0, 0, -100))
+droplet = bpy.context.active_object
+droplet.name = "DropletInstance"
+bpy.ops.object.shade_smooth()
+droplet.hide_render = True
+
+for psys in dom.particle_systems:            # "Spray", "Foam", "Bubbles"
+    st = psys.settings
+    st.render_type       = 'OBJECT'
+    st.instance_object   = droplet
+    st.particle_size     = 0.0025            # for a ~1 m domain
+    st.size_random       = 0.5
+    st.display_method    = 'RENDER'
+    st.display_percentage = 3                # keep the viewport usable
+```
+
+### 15.7 Mantaflow Guides (only if the emitter approach cannot get the shape)
+
+```python
+ds.use_guide        = True
+ds.guide_source     = 'EFFECTOR'   # or 'DOMAIN' + ds.guide_parent = other_domain_object
+ds.guide_alpha      = 2.0          # "Weight"  - >4 makes water look like it is on rails
+ds.guide_beta       = 5            # "Size"
+ds.guide_vel_factor = 2.0          # "Velocity Factor"
+
+# a guide effector swept along the same Follow Path curve:
+guide_obj = bpy.data.objects["GuideSphere"]
+gm = add_fluid_modifier(guide_obj, 'EFFECTOR')
+gm.effector_settings.effector_type  = 'GUIDE'
+gm.effector_settings.velocity_factor = 2.0
+gm.effector_settings.guide_mode      = 'MAXIMUM'   # MAXIMUM / MINIMUM / OVERRIDE / AVERAGED
+```
+
+### 15.8 Baking
+
+```python
+import bpy
+
+def bake(dom, what):
+    """what in {'data', 'mesh', 'particles'}. Run headless for a blocking bake:
+       blender -b hero.blend -P bake.py"""
+    scene = bpy.context.scene
+    op = {'data':      bpy.ops.fluid.bake_data,
+          'mesh':      bpy.ops.fluid.bake_mesh,
+          'particles': bpy.ops.fluid.bake_particles}[what]
+    with bpy.context.temp_override(scene=scene, object=dom,
+                                   active_object=dom, selected_objects=[dom]):
+        op()
+
+def free(dom, what):
+    scene = bpy.context.scene
+    op = {'data':      bpy.ops.fluid.free_data,
+          'mesh':      bpy.ops.fluid.free_mesh,
+          'particles': bpy.ops.fluid.free_particles,
+          'all':       bpy.ops.fluid.free_all}[what]
+    with bpy.context.temp_override(scene=scene, object=dom,
+                                   active_object=dom, selected_objects=[dom]):
+        op()
+
+# Production order: Data -> Particles -> Mesh (mesh is the disk hog, do it last)
+free(dom, 'all')
+bake(dom, 'data')
+bake(dom, 'particles')
+bake(dom, 'mesh')
+```
+
+> **Blender 3.6 vs 4.x:** `bpy.context.temp_override(...)` above works in both. The old
+> `bpy.ops.fluid.bake_data({'scene': s, 'object': o})` dict-override form was **removed in 4.0** — if you
+> inherit a script that uses it, this is the fix.
+
+### 15.9 Resolution ladder helper
+
+```python
+LADDER = {
+    'block':   dict(res=100, mesh=False, particles=False, upres=2),
+    'confirm': dict(res=200, mesh=True,  particles=True,  upres=2),
+    'final':   dict(res=320, mesh=True,  particles=True,  upres=3),
+}
+
+def set_quality(ds, level):
+    cfg = LADDER[level]
+    ds.resolution_max = cfg['res']
+    ds.use_mesh       = cfg['mesh']
+    ds.mesh_scale     = cfg['upres']
+    for p in ('use_spray_particles', 'use_foam_particles', 'use_bubble_particles'):
+        setattr(ds, p, cfg['particles'])
+    # high energy needs more substeps
+    if cfg['res'] >= 250:
+        ds.cfl_condition = 2.0
+        ds.timesteps_max = 8
+    print(f"[fluid] quality={level} res={cfg['res']} — FREE THE CACHE AND RE-BAKE")
+
+set_quality(ds, 'block')
+```
+
+---
+
+## 16. Working checklist
+
+**Before every bake**
+- [ ] Scale applied on domain, emitter, curve, and every effector (`Ctrl+A > Scale`)
+- [ ] Domain rotation is zero
+- [ ] Domain is a plain 8-vertex cube, display as Bounds, render visibility off
+- [ ] Domain longest dimension is ~0.8–1.5 m for a product-scale splash
+- [ ] Border Collisions all **off** (open domain)
+- [ ] Cache Type = **Modular**, cache directory set to a real path, frame range set
+- [ ] Bottle uses a **closed, decimated, slightly inflated proxy** collider, not the render mesh
+- [ ] Fractional Obstacles **on**
+- [ ] Emitter `Subframes` ≥ 3
+- [ ] `Use Flow` keyframed to a finite burst
+- [ ] Initial Velocity **on** with a Normal value (emitter motion alone imparts nothing)
+- [ ] `forces` collection assigned to `Field Weights > Effector Collection`
+- [ ] One thing changed since the last bake
+
+**Blocking pass (res 100)** — Data only, no mesh, no whitewater, 2–5 min per bake, 10–20 iterations,
+judged through the render camera.
+
+**Confirm pass (res 200)** — expect 1–5 frames of timing drift. Fix leaks and flyers. Render 20 frames
+at final quality and look at them as images.
+
+**Final pass (res 250–400)** — free all, bake Data overnight, then Particles, then Mesh. Save the .blend and
+back up the cache the moment you like it.
+
+**If it looks wrong, in this order**
+1. Domain size (physical scale) — 2.3
+2. Emitter path, speed, burst timing — 6.3 / 5.3
+3. Initial Velocity Normal — 5.4
+4. Force field strengths and their keyframes — 7.4 / 7.5
+5. Mesh Particle Radius and Upres — 10.1 / 10.2
+6. Whitewater sampling — 9.3
+7. Resolution — 4
+8. FLIP Ratio — 3.2
+
+The solver is the last thing on that list for a reason.

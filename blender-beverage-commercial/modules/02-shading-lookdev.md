@@ -69,7 +69,7 @@ Glass BSDF
 
 That is the whole material. Water at 20 °C is IOR 1.333. Roughness 0.0 is correct — real water surfaces are optically smooth; the "roughness" you perceive in a splash is *geometric* (bubbles, sub-droplet detail, sheet curvature), not microfacet. If your splash looks too sharp, add geometry detail or motion blur, do **not** raise roughness. Roughness > 0.05 on a splash turns it into frosted glass and instantly reads as CG.
 
-Set **Settings > Shadow Mode = None** in Cycles material settings? No — in Cycles that panel is EEVEE-only. In Cycles, the correct move for a splash is to leave shadows on and let refraction handle it; if the splash casts an ugly black blob, that is the transmission-bounce problem in §1.3, not a shadow setting.
+Note: `Settings > Shadow Mode` is an **EEVEE-only** panel — it does nothing in Cycles. In Cycles, leave shadows on and let refraction handle it; if the splash casts an ugly black blob, that is the transmission-bounce problem in §1.3, not a shadow setting.
 
 ### 1.3 Why a Glass splash renders BLACK (and every fix)
 
@@ -759,3 +759,638 @@ You need art before you can look-dev. Fastest paths:
 - Generate placeholder art with an image model at 2048², then clean up the type. Do **not** ship generated brand marks; replace with the real logo before delivery.
 
 Whatever you do: type must be **crisp**. Blurry label type kills the shot faster than a bad splash. See §10 for texel density.
+
+---
+
+## 5. Wet surfaces
+
+The highest-value technique in this module. A dry hero bottle in a splash shot is the single most common failure in amateur beverage renders — the splash is flying past a bone-dry product and the composite falls apart.
+
+Wetness does three optical things, and you must do all three:
+1. **Roughness drops.** A water film smooths microsurface. Roughness 0.35 → 0.05.
+2. **A second specular layer appears.** The water film has its own IOR-1.33 interface on top of the object's surface. That is what a **Coat** layer models.
+3. **Base colour darkens and saturates.** Wet materials are darker because light enters, scatters, and less comes back. Multiply base colour by ~0.6–0.8 in wet areas.
+
+### 5.1 Level 1 — the global wet coat (2 minutes)
+
+On the cap, fruit and label:
+```
+Principled BSDF
+  Coat Weight    = 0.6        (3.6: "Clearcoat")
+  Coat Roughness = 0.03       (3.6: "Clearcoat Roughness")
+  Coat IOR       = 1.33       (4.x only; 3.6's clearcoat is fixed at 1.5)
+```
+Uniform wetness everywhere. Fast, and better than nothing, but wrong: real splash-wetting is **directional and patchy** — the side facing the splash is soaked, the far side is dry.
+
+### 5.2 Level 2 — a procedural wetness mask (10 minutes)
+
+Drive Coat Weight and Roughness from a mask instead of a constant. Cheapest useful mask is a **directional gradient plus noise**:
+
+```
+Texture Coordinate (Object) → Separate XYZ
+   ├─ X → Map Range (From -0.05..0.05 → To 0..1)    # wet on the +X side, dry on -X
+   └────────────────────────────────────────────┐
+Noise Texture (Scale 12, Detail 8, Roughness 0.7) ┤
+   → Mix Color (Multiply, Fac 0.6) ───────────────┘
+   → ColorRamp [pos 0.35 black → pos 0.55 white]   # sharpen into runnels
+   ├→ Principled  Coat Weight
+   ├→ Map Range (0..1 → 0.35..0.04) → Principled Roughness
+   └→ Mix Color (Multiply) with Base Color, factor 0.35   # darken where wet
+```
+Combine with a **Pointiness** or **Geometry > Normal Z** term so water pools in crevices and runs off convex tops:
+`Geometry (Pointiness) → Map Range (0.44..0.5 → 0..1)` → add into the mask.
+
+### 5.3 Level 3 — Dynamic Paint wetmap (the real technique)
+
+This is the one that makes it look shot, not rendered. You let the actual splash geometry paint a wetness map onto the bottle, then drive roughness/coat/bump from it. Because the splash animates, the bottle **gets progressively wetter as the splash hits it, and dries afterwards.**
+
+**Step 0 — prepare the brush geometry.**
+Dynamic Paint needs a stable, evaluable animated mesh. A live Mantaflow liquid mesh re-generated from cache each frame usually works but is slow and occasionally unstable. **Bake the fluid mesh to Alembic first** (`File > Export > Alembic`, frame range = your sim range, then re-import), and use the Alembic-driven mesh as the brush. This also lets you paint the wetmap without re-simulating.
+
+Alternatively, and often better: use the splash's **particle system** (Mantaflow spray/foam/bubble particles) as the brush source. Particle-based painting gives you speckled, droplet-shaped wetting instead of a blobby proximity smear.
+
+**Step 1 — make the bottle a canvas.**
+1. Select `mountain dew bottle` (and `bottle_label`, and any fruit you want wet).
+2. `Physics Properties > Dynamic Paint > Add > Canvas`.
+3. `Surface Type: Paint`.
+4. `Format: Vertex` — paints into vertex colour attributes. Requires **dense geometry**: subdivide the bottle to ~150k–400k verts, or Dynamic Paint will paint chunky blobs. (Choose `Image Sequence` format instead if you want a UV-space bakeable map and your UVs are clean — better quality, more setup, and it writes PNG sequences to disk.)
+5. Open **Output** sub-panel. You get two outputs:
+   - **Paint Output** → default attribute name `dp_paintmap` (the colour, permanent).
+   - **Wetmap Output** → tick it; default attribute name `dp_wetmap` (0–1, **fades as it dries**).
+6. Open **Dissolve** sub-panel → enable **Dry**, set **Dry Time** to e.g. 120 frames, and enable **Slow** for a non-linear dry curve. Without Dry enabled, the wetmap never decays and you just get a permanent mask.
+7. Set **Frame Start/End** to cover the splash, and **Sub-Steps 2–4** so a fast splash does not skip past the bottle between frames.
+
+**Step 2 — make the splash a brush.**
+1. Select the splash mesh (or the particle-emitting object).
+2. `Physics Properties > Dynamic Paint > Add > Brush`.
+3. **Source**:
+   - `Mesh Volume + Proximity` with **Proximity Distance ≈ 0.01 m** — paints where the mesh is near or overlapping. Good for the main splash body.
+   - `Particle System` — pick the Mantaflow spray/foam system. Use **Solid Radius** ≈ particle size and **Smooth Radius** 0.005 for soft-edged droplet marks. Better for speckle.
+4. **Paint Color** = pure white (1,1,1). You are painting a mask, not a colour.
+5. **Absolute Alpha** on, **Paint Alpha** 1.0, **Wetness** 1.0.
+6. Optional: **Use Object Velocity** to make fast-moving splash paint harder.
+
+**Step 3 — bake.**
+`Dynamic Paint > Canvas > Cache > Bake`. Baking is required for reliable playback and rendering; without it, you get correct results only when the timeline plays linearly from the start frame.
+
+**Step 4 — read the wetmap in the shader.**
+
+Blender 3.6+:
+```
+Color Attribute node  [Name: "dp_wetmap"]     (or Attribute node, Type: Geometry, Name: dp_wetmap)
+   → (use the Fac / Alpha output; the wetmap is greyscale)
+   → ColorRamp [pos 0.02 black → pos 0.30 white]     # tighten the falloff
+   → WET  (0..1)
+```
+Then fan `WET` out to four places:
+```
+WET → Principled  Coat Weight                                    (0 → 0.85)
+WET → Map Range [0..1 → 0.42..0.05] → Principled Roughness
+WET → Mix Color (Multiply, Fac = WET*0.4) on Base Color          # darken
+WET → Math (Multiply, 0.4) → Bump Strength   ←  Voronoi droplets (§6)
+```
+That last line is the important one: use the wetmap to **mask where droplets exist**, so condensation/spray droplets only appear where the splash actually hit. Dry side = clean, wet side = beaded. That is the detail that makes people ask what renderer you used.
+
+**Gotchas:**
+- **Vertex format needs vertex density.** If your wetmap looks like low-poly triangles, subdivide.
+- Dynamic Paint runs on the **evaluated** mesh, but modifier order matters — put Subdivision *before* Dynamic Paint in the stack.
+- The attribute name is case-sensitive: `dp_wetmap`, not `dp_wetMap`.
+- In Blender 4.x use the **Color Attribute** node; the old `Attribute` node still works but the Color Attribute node is explicit about domain.
+- If nothing paints: check the brush and canvas have overlapping **Frame Start/End**, check the brush's Proximity Distance is bigger than the actual gap, and check the canvas object's scale is applied.
+- Wetmap + motion blur: the wetmap changes per frame, so it is motion-consistent. Good.
+
+**Step 5 — bake it down (optional but recommended for a long sequence).**
+Once happy, `Canvas > Format: Image Sequence` and bake the wetmap to a PNG sequence in UV space. Then swap the Color Attribute node for an `Image Texture` reading the sequence (Image node > Source: Image Sequence, auto-refresh on). Render time drops and you can paint fixes in Photoshop.
+
+---
+
+## 6. Condensation droplets
+
+Three approaches, ranked by cost and by where each belongs.
+
+### 6.1 Geometry-nodes scattered droplet instances
+
+**Best quality; use on the hero bottle in close-up.** Real geometry means real refraction, real caustics, real silhouette on the bottle's edge — droplets that break the profile of the glass are a massive realism cue that a bump map can never give you.
+
+```
+Group Input (Geometry)
+ → Distribute Points on Faces  [Poisson Disk, Distance Min 0.002, Density 8000,
+                                Density Factor ← wetmap / vertex group]
+ → Instance on Points  [Instance ← a squashed UV Sphere, ~8 verts, scaled 0.4 in Z]
+      Scale ← Random Value (Float, 0.0006 .. 0.004)
+      Rotation ← Align Euler to Vector (Z ← Normal)
+ → Realize Instances (only if you need per-droplet shading variation)
+ → Set Material  [M_Water_Droplet: Glass BSDF, IOR 1.33, Rough 0.0]
+ → Group Output
+```
+Notes:
+- **Squash the sphere in Z to ~0.35** and push it slightly into the surface so it reads as a bead sitting on glass with a contact meniscus, not a floating ball.
+- Drive **Density Factor** from the `dp_wetmap` attribute (§5.3) so droplets only appear on the wet side. Sample it with a `Named Attribute` node (Float, "dp_wetmap").
+- Add a second, sparser distribution of **large runnel droplets** (scale 0.004–0.012, elongated in −Z) with vertical streaks — condensation runs down.
+- Cost: 20–80k tiny glass instances is fine; a million is not. Use a Density Factor that falls off away from camera.
+
+### 6.2 Procedural Voronoi/noise bump droplets
+
+**Best cost/benefit; use everywhere else** — the far side of the bottle, background bottles, the fruit. No geometry, no silhouette, but at any distance beyond a tight close-up the read is identical.
+
+**Working recipe, with numbers:**
+
+```
+Texture Coordinate (Object)          # Object, not UV — avoids seam stretching
+ → Mapping (Scale 1, 1, 1.6)         # slight Z stretch = drips run down
+
+ ── A. DROPLET SHAPE ────────────────────────────────────────────
+ → Voronoi Texture  [Feature: F1, Distance Metric: Euclidean,
+                     Scale 55, Randomness 1.0]        (use .Distance output)
+ → Color Ramp   [interpolation: Ease
+                   pos 0.000  → white (1,1,1)
+                   pos 0.085  → black (0,0,0)]        # only near cell centres survive
+ → Math (Power, 0.5)                                  # rounds the profile into a dome
+      = DROPS
+
+ ── B. RANDOM DELETION MASK  (real condensation is patchy) ──────
+ → (from Mapping) Noise Texture [Scale 5.0, Detail 3, Roughness 0.5]
+ → Color Ramp   [Constant:  pos 0.42 black → pos 0.43 white]
+      = MASK
+
+ ── C. SIZE VARIATION ───────────────────────────────────────────
+ → (from Mapping) Noise Texture [Scale 18, Detail 2] → Color Ramp [0.30 → 0.70]
+      = SIZEVAR
+ → Math (Multiply)  DROPS × SIZEVAR
+
+ ── D. COMBINE + WETMAP GATE ────────────────────────────────────
+ Math (Multiply): (DROPS×SIZEVAR) × MASK  → Math (Multiply) × dp_wetmap
+      = D  (final 0..1 droplet field)
+
+ ── E. DRIVE THE SHADER ─────────────────────────────────────────
+ D → Bump [Strength 0.35, Distance 0.0006] → Principled Normal
+ D → Map Range [0..1 → 0.30 .. 0.02]       → Principled Roughness
+ D → Math (Multiply, 0.25) → Mix Color (Multiply) on Base Color   # droplets darken
+ D → Math (Multiply, 0.5)  → Principled Coat Weight
+```
+
+Tuning cheatsheet:
+| Want | Change |
+|---|---|
+| More droplets | Voronoi Scale 55 → 90 |
+| Bigger droplets | ColorRamp black stop 0.085 → 0.14 |
+| Fewer, sparser | MASK ColorRamp threshold 0.42 → 0.55 |
+| Elongated drips | Mapping Scale Z 1.6 → 3.5 |
+| Softer, condensation-y | Bump Strength 0.35 → 0.18, Voronoi Scale 120 |
+| Rain-hit, chunky | Voronoi Scale 25, Bump Strength 0.6 |
+
+Two important refinements:
+- **Layer two Voronois at different scales** (55 and 130) and `Math (Maximum)` them. Real droplet fields are bimodal — a few big beads among many tiny ones. One Voronoi always reads as a regular pattern.
+- **Use "Smooth F1"** (Voronoi Feature: Smooth F1, Smoothness 0.1) if you want droplets that merge where they touch. That merging is characteristic of condensation and Distance-metric F1 will not give it to you.
+
+### 6.3 Droplet normal map
+
+A tiling droplet normal map (from ambientCG, Poliigon, or baked from your own Voronoi setup) plugged into `Image Texture (Non-Color) → Normal Map → Principled Normal`. Fastest to render, zero node cost, but: it tiles visibly on a cylinder, it has no wetmap gating unless you mask it, and it carries no roughness variation unless the pack ships one. **Use for background/mid-ground props only.** For the hero, bake your own §6.2 setup to a texture instead — same speed, custom look.
+
+### 6.4 Airborne micro-droplets (the frame-wide sparkle)
+
+The reference frame has droplets scattered across the *whole image*, not just on surfaces. These are **not** part of the fluid sim mesh — resolving them in Mantaflow would need an absurd resolution.
+
+Build them as instanced geometry (a Geometry Nodes `Distribute Points in Volume` inside a big cube around the product, `Instance on Points` an 8-vert ico sphere, random scale 0.3–2 mm), shaded with the **same Glass BSDF as the splash**. Key look-dev points:
+- They must be **in the depth of field**. The ones near camera go to big soft bokeh circles — that is 70% of the "commercial" feel. Make sure some sit at 0.15–0.3 m from the lens.
+- They need something bright to reflect. They will be almost invisible against a dark area and blaze against the emissive backdrop — which is the correct behaviour and another argument for §8's emissive sweep.
+- Give a *few* of them a slightly higher IOR (1.45) so they catch harder highlights and the field does not look uniform.
+- Motion blur: animate the point positions slightly so they streak. Static airborne droplets in a motion-blurred frame read as dust on the lens.
+
+---
+
+## 7. The fruit — limes / green apples
+
+Fruit is the shot's colour accent and the only thing in frame doing real subsurface scattering. It also has the highest fake-to-real ratio: get SSS wrong and it looks like painted rubber.
+
+### 7.1 Why SSS + a backlight is the whole trick
+
+Citrus flesh is a bundle of translucent juice vesicles. Light entering the cut face travels several millimetres and exits somewhere else, glowing. **You only see that if light is coming from behind or from a grazing angle.** SSS lit purely from the front is indistinguishable from diffuse. So the fruit shader and the fruit lighting are one decision:
+
+> Every fruit slice in frame should have a light **behind it, relative to camera**, even if it is a small dedicated area light that only that slice sees (use Light Linking in 4.0+, or a light with a small radius placed just out of frame).
+
+That is the single highest-leverage note in this section.
+
+### 7.2 Citrus flesh (the cut face)
+
+```
+Principled BSDF
+  Base Color         = #B6D64A  (lime flesh, yellow-green)  / #E8F0B8 for a pale apple flesh
+  Subsurface Weight  = 0.75          (3.6: "Subsurface")
+  Subsurface Radius  = (0.004, 0.010, 0.003)  metres — R, G, B
+  Subsurface Scale   = 0.02          ** 4.x ONLY ** — multiplies Radius. See warning below.
+  Roughness          = 0.30
+  Specular IOR Level = 0.5
+  Coat Weight        = 0.55          ← the wet juice film. Essential.
+  Coat Roughness     = 0.05
+  Normal ← Bump (Strength 0.4) ← Voronoi (Scale 90, F1) → ColorRamp   # juice vesicles
+```
+
+**The radius numbers, explained.** Radius is per-channel scattering distance in scene units (metres). For a green fruit you want **green to travel furthest**, so the transmitted glow is green:
+- Lime / green apple: `(0.004, 0.010, 0.003)` — G dominant.
+- Orange / grapefruit: `(0.012, 0.006, 0.002)` — R dominant, the classic warm glow.
+- Human skin (for reference, so you recognise the pattern): `(1.0, 0.2, 0.1)` scaled to ~0.01.
+
+A lime slice is ~6 mm thick, so a green radius of 10 mm means light crosses the whole slice — which is exactly the backlit glow you want. If the fruit looks like plastic, your radius is **too small**, not too large.
+
+**The 4.x upgrade trap.** Blender 4.0 added `Subsurface Scale` (default **0.05**), which *multiplies* the Radius. A 3.6 material with Radius (0.004, 0.010, 0.003) opened in 4.x effectively becomes (0.0002, 0.0005, 0.00015) — SSS vanishes and your fruit goes rubber. Fix: either set `Subsurface Scale = 1.0` and keep your 3.6 radii, or keep Scale at 0.05 and multiply your radii by 20. Also note `Subsurface Color` was **removed** in 4.0 — SSS now takes its colour from `Base Color`, so any 3.6 material relying on a differently-coloured Subsurface Color needs manual rework.
+
+**Method.** Cycles offers Random Walk / Random Walk (Skin) / Christensen-Burley. Use **Random Walk** for fruit — it respects geometry thickness, so thin slice edges glow and thick sections do not. Burley ignores thickness and looks flat on a slice. Random Walk needs the mesh to be a **closed volume** — a single-sided slice with no thickness will render wrong.
+
+**Alternative for very thin slices:** skip SSS entirely and use `Principled (Transmission 0.3)` or a `Translucent BSDF` added under a Diffuse. Cheaper, and for a slice tumbling past at speed it is indistinguishable.
+
+### 7.3 The rind
+
+The rind is the contrast element — opaque, saturated, textured, with a distinctive pitted surface.
+
+```
+Principled BSDF
+  Base Color        = #3E8E1E (lime) / #6DBE2C (green apple)
+     ← modulated by:  Voronoi (Scale 200, F1) → ColorRamp → Mix Color (Multiply, 0.25)
+  Roughness         = 0.45
+     ← varied by:     same Voronoi → Map Range [0.30 .. 0.60]
+  Subsurface Weight = 0.15        # a little, at the very edge, keeps it from going dead
+  Subsurface Radius = (0.002, 0.004, 0.001)
+  Coat Weight       = 0.7         # citrus skin is naturally waxy AND it is wet in this shot
+  Coat Roughness    = 0.06
+  Normal ← Bump (Strength 0.6, Distance 0.0004)
+     ← Voronoi [Feature: F1, Scale 220] → ColorRamp [Ease, 0.0 white → 0.25 black]  # pits
+```
+The pitted Voronoi bump is what makes citrus recognisable at a glance. Scale it to your fruit size: a 60 mm lime wants Voronoi Scale ~200–260 in Object coordinates. If the pits look like a regular grid, raise **Randomness** to 1.0 and add a low-scale Noise into the Voronoi's vector via a `Mapping` + `Noise` distortion.
+
+**The albedo/pith layer.** Real citrus has a white pith between rind and flesh. Model it as a thin geometry ring with `Base Color #F2F0E2, Roughness 0.75, Subsurface Weight 0.5, Radius (0.006,0.006,0.006)`. It is a 3-minute detail that is highly visible on a cut face and almost always missing in CG fruit.
+
+### 7.4 The wet coat on the fruit
+
+Apply §5.1's coat plus §6.2's procedural droplets to *both* rind and flesh. Fruit in a splash shot must be beaded. Additional notes:
+- On the **flesh**, wetness should read as a continuous juice film (high Coat Weight, near-zero Coat Roughness, no droplet bump) — juice wets the surface completely.
+- On the **rind**, waxy skin beads (droplet bump on, Coat masked by droplets) — water does not wet wax.
+
+That difference — sheet on the flesh, beads on the rind — is a genuinely advanced-looking detail for two extra nodes.
+
+### 7.5 Whole green spheres
+
+The reference also shows whole green fruit. Same rind shader, plus:
+- A **stem divot** with a darker, rougher patch and an AO-style darkening (`Geometry > Pointiness → ColorRamp → Mix into Base Color`).
+- Colour variation between individual fruits: `Object Info > Random → ColorRamp (green ramp) → Mix into Base Color, Fac 0.25`. A dozen identically-coloured apples read as instances; randomised ones read as fruit.
+- A faint **bloom/wax haze** on apples: add a `Sheen Weight 0.15` with a pale sheen tint. Very characteristic and almost never done.
+
+---
+
+## 8. The backdrop
+
+The saturated orange→amber vertical gradient with no visible seam or horizon. Three ways to build it, and the choice is **not** aesthetic — it determines whether your product is lit by the backdrop.
+
+### 8.1 Option A — a curved sweep/cyclorama lit by coloured lights
+
+A physical infinity cove: a plane that curves up into a vertical wall with a large-radius fillet, so there is no horizon line.
+
+**Build:** a 4×4 m plane, extrude the back edge up 3 m, bevel that corner with **Segments 12–24, Width ~1.0 m**, Shade Smooth. Material: plain white or light grey diffuse (`Base Color 0.8, Roughness 0.6`).
+Then light it with two coloured lights: a warm orange area light low and behind the product aimed at the lower sweep (`#FF6A00`, strength high), and a paler amber/yellow light aimed at the upper wall (`#FFB347`). The gradient comes from **falloff**, exactly like a real studio.
+
+- **Pros:** completely physical. Bounce, contact shadows, caustic receiver (§2.3), correct inverse-square falloff, and the product genuinely sits in the environment. Colours can be changed by moving lights, which is how a real photographer works.
+- **Cons:** slowest to set up, needs real lighting skill, and getting a *perfectly even* saturated gradient takes iteration. Colour is limited by what the lights + white surface can produce (you cannot exceed the surface's albedo).
+
+### 8.2 Option B — an emission plane with a gradient (recommended)
+
+A large plane or a curved sweep whose **material is emissive**, carrying the gradient directly.
+
+```
+Texture Coordinate (Object)        # Object, not Generated — survives object scaling predictably
+ → Separate XYZ  →  Z
+ → Map Range  [From Min -1.5, From Max 1.5 → To 0, 1]     # fit to the sweep's height
+ → Color Ramp  [interpolation: B-Spline  (smoother than Linear, no visible banding)
+       pos 0.00  #FFB43C     (bright amber, top)
+       pos 0.45  #FF7A18     (mid orange)
+       pos 1.00  #C43C00     (deep burnt amber, bottom)]
+ → Emission  [Strength 4.0]
+ → Material Output
+```
+
+If you prefer a true `Gradient Texture` node (useful when you want to rotate the gradient axis freely):
+```
+Texture Coordinate (Object) → Mapping (Rotation X 90°) → Gradient Texture (Linear)
+ → Color Ramp [as above] → Emission (Strength 4.0) → Material Output
+```
+
+**Why this is the recommended option:** an emissive plane is a **light**. It lights the product, it fills the splash with something to refract (§1.3 cause E), it puts a huge soft orange gradient reflection down the side of the bottle, and it gives the airborne droplets something to blaze against. You get the exact gradient you designed *and* real bounce. Best of both.
+
+Practical notes:
+- **Strength 3–8.** Above ~10 the backdrop clips to white in the highlights and the gradient disappears under the view transform.
+- Turn OFF `Object Properties > Visibility > Ray Visibility > **Shadow**` on the backdrop so it does not shadow itself, and consider turning off **Diffuse** ray visibility on a *second* copy if you want to decouple "what the camera sees" from "what lights the product". Advanced version: **two** backdrops — one camera-visible (Emission, no light contribution) and one invisible-to-camera emissive panel that does the lighting. Total independent control of look vs light.
+- Put the backdrop in its own **Light Group** (`View Layer > Passes > Light Groups`, then `Object > Shading > Light Group`). Then you can regrade the backdrop's contribution in comp without re-rendering. Do this. Always.
+- **Add a slight vignette in the shader**, not just in comp: multiply the emission by a radial `Gradient Texture (Spherical)` → ColorRamp so the edges fall off. Real coves do this and it focuses the eye on the product.
+
+### 8.3 Option C — world shader gradient
+
+```
+World > Surface:
+Texture Coordinate (Generated) → Separate XYZ → Z
+ → Map Range [0..1 → 0..1]
+ → Color Ramp [same stops as 8.2]
+ → Background (Strength 1.0) → World Output
+```
+Or the classic sky-style version using `Texture Coordinate (Window)` for a screen-space gradient that never moves with the camera.
+
+- **Pros:** zero geometry, instant, always seamless, lights the whole scene from every direction, and the splash always has something to refract.
+- **Cons:** it is **infinitely far away**. There is no falloff, no contact, no caustic receiver, and — critically — **no surface for the caustics or the splash shadow to land on**. Your product floats in a void. The bottle will also pick up an unrealistically uniform ambient wash that flattens it.
+
+**Verdict:** use the world gradient as a *supplement* (a low-strength ambient tint, Strength 0.3–0.8) underneath Option B, never as the only backdrop for a hero product shot.
+
+### 8.4 Colour values that actually work
+
+Values are sRGB hex, which is what Blender's colour picker Hex field takes (it converts to linear for you). If you set values via Python you must supply **linear** floats — see the conversion helper in the script below.
+
+| Role | Hex | Notes |
+|---|---|---|
+| Backdrop top (bright amber) | `#FFB43C` | keeps the upper frame open and airy |
+| Backdrop mid | `#FF7A18` | the dominant note; matches the reference |
+| Backdrop bottom (deep) | `#C43C00` | grounds the product, gives the splash something dark to read against |
+| Optional hot spot behind bottle | `#FFD98A` | a soft radial hotspot behind the neck separates the bottle silhouette |
+| Key light | `#FFF4E8` | near-white, very slightly warm |
+| Rim / kicker | `#FFE0A8` | warm amber, from behind, catches the splash rims |
+| Fill (cool, subtle) | `#BFD8FF` | 5–10% strength; the tiny cool bounce that keeps the splash from going all-orange |
+
+**The one cool light matters.** With an all-orange environment, a colourless splash still turns orange because everything it refracts is orange. Adding one weak cool fill or a small cool-tinted reflector card just out of frame is what keeps the splash reading **silver-white** as in the reference. Look-dev decision, executed with a light.
+
+### 8.5 bpy — emissive gradient backdrop
+
+```python
+import bpy
+
+def srgb_to_linear(c):
+    return c / 12.92 if c <= 0.04045 else ((c + 0.055) / 1.055) ** 2.4
+
+def hex_rgba(h, a=1.0):
+    h = h.lstrip("#")
+    r, g, b = (int(h[i:i+2], 16) / 255.0 for i in (0, 2, 4))
+    return (srgb_to_linear(r), srgb_to_linear(g), srgb_to_linear(b), a)
+
+
+def make_backdrop_gradient(name="M_Backdrop_Amber",
+                           stops=(("#FFB43C", 0.00),
+                                  ("#FF7A18", 0.45),
+                                  ("#C43C00", 1.00)),
+                           strength=4.0, z_min=-1.5, z_max=3.0):
+    mat = bpy.data.materials.new(name)
+    mat.use_nodes = True
+    nt = mat.node_tree
+    nt.nodes.clear()
+
+    out  = nt.nodes.new("ShaderNodeOutputMaterial"); out.location  = (700, 0)
+    emis = nt.nodes.new("ShaderNodeEmission");       emis.location = (500, 0)
+    emis.inputs["Strength"].default_value = strength
+
+    ramp = nt.nodes.new("ShaderNodeValToRGB");  ramp.location = (200, 0)
+    cr = ramp.color_ramp
+    cr.interpolation = 'B_SPLINE'          # avoids visible banding on a big gradient
+    while len(cr.elements) > 1:
+        cr.elements.remove(cr.elements[-1])
+    cr.elements[0].position = stops[0][1]
+    cr.elements[0].color    = hex_rgba(stops[0][0])
+    for hexcol, pos in stops[1:]:
+        e = cr.elements.new(pos)
+        e.color = hex_rgba(hexcol)
+
+    mr = nt.nodes.new("ShaderNodeMapRange");  mr.location = (0, 0)
+    mr.inputs["From Min"].default_value = z_min
+    mr.inputs["From Max"].default_value = z_max
+    mr.inputs["To Min"].default_value   = 0.0
+    mr.inputs["To Max"].default_value   = 1.0
+
+    sep = nt.nodes.new("ShaderNodeSeparateXYZ"); sep.location = (-200, 0)
+    tex = nt.nodes.new("ShaderNodeTexCoord");    tex.location = (-400, 0)
+
+    nt.links.new(tex.outputs["Object"], sep.inputs["Vector"])
+    nt.links.new(sep.outputs["Z"],      mr.inputs["Value"])
+    nt.links.new(mr.outputs["Result"],  ramp.inputs["Fac"])
+    nt.links.new(ramp.outputs["Color"], emis.inputs["Color"])
+    nt.links.new(emis.outputs["Emission"], out.inputs["Surface"])
+    return mat
+
+
+def build_backdrop(width=6.0, depth=6.0, height=3.5, bevel_segments=16):
+    """Curved cyclorama sweep with the gradient material."""
+    bpy.ops.mesh.primitive_plane_add(size=1)
+    ob = bpy.context.object
+    ob.name = "BACKDROP_sweep"
+    ob.scale = (width, depth, 1)
+    bpy.ops.object.transform_apply(scale=True)
+    # extrude back edge upward, then bevel the corner -> seamless cove
+    import bmesh
+    me = ob.data
+    bm = bmesh.new(); bm.from_mesh(me)
+    back = [v for v in bm.verts if v.co.y > 0]
+    ret  = bmesh.ops.extrude_vert_indiv(bm, verts=back)
+    for v in ret['verts']:
+        v.co.z += height
+    bm.to_mesh(me); bm.free()
+    bev = ob.modifiers.new("Cove", 'BEVEL')
+    bev.width = min(width, height) * 0.45
+    bev.segments = bevel_segments
+    bev.limit_method = 'ANGLE'
+    for p in me.polygons:
+        p.use_smooth = True
+
+    mat = make_backdrop_gradient(z_min=-0.2, z_max=height)
+    ob.data.materials.append(mat)
+    ob.visible_shadow = False          # do not let the cove shadow itself
+    return ob
+
+build_backdrop()
+```
+
+---
+
+## 9. Colour strategy
+
+### 9.1 Why orange + colourless + green
+
+The palette in the reference is a deliberate, textbook choice, not an accident.
+
+- **Orange backdrop (≈30° hue)** — the brand colour, and a warm advancing colour that pushes forward and reads as energy/citrus/sugar. It occupies the largest area, so it sets the shot's emotional temperature before anything else registers.
+- **Green fruit (≈100° hue)** — roughly 70° from orange on the wheel. Not a true complement (that would be blue), but a **split/triadic** relationship: enough separation to pop hard, close enough to stay in the warm-natural family. Green also carries "fresh / natural / real fruit", which is the ad's claim.
+- **Colourless silver-white splash** — the achromatic element. Against a saturated field, *neutral is the loudest colour you can use*. The splash reads as pure luminance contrast, which is the strongest kind. If the splash were tinted orange it would merge with the background; if tinted blue it would fight the palette and look like a different product.
+- **Amber liquid in the bottle** — the same hue family as the backdrop but **darker and more saturated**, so the product separates from its environment by *value*, not hue. That is the trick: same colour story, different brightness.
+
+The result is a **two-hue-plus-neutral** palette. Two hues is a design constraint that reads as "art-directed"; four hues reads as "assets from different packs".
+
+### 9.2 Letting brand colour drive everything
+
+Working method: take the brand's primary colour, then derive the whole scene from it.
+
+1. **Brand primary** → the bottle's liquid/cap colour and the backdrop's mid-tone (backdrop desaturated ~15% and lightened, so the product stays the most saturated).
+2. **Backdrop gradient** → brand primary lightened +25% at the top, darkened −35% and slightly hue-rotated toward red at the bottom. A hue shift across a gradient (orange→red-amber) looks vastly more expensive than a pure lightness ramp.
+3. **Accent (fruit, garnish)** → 60–120° from the brand hue. Pick the one that matches the flavour claim.
+4. **Lights** → near-neutral warm key, one cool low-strength fill to keep neutrals neutral.
+5. **Splash** → neutral, always.
+
+Every colour in the frame should be derivable from step 1. If a colour cannot be justified from the brand hue, remove it.
+
+### 9.3 Keeping the product the brightest, most saturated thing
+
+Two mechanisms, both look-dev:
+
+- **Value hierarchy.** The backdrop's brightest point should be *below* the product's brightest specular. Ensure this by pinning the backdrop emission strength (3–8) and then lighting the product with a key that puts real specular hits above it. Check it by switching the View Transform to **Standard** momentarily and looking at where things clip — the product's highlights should clip first.
+- **Saturation hierarchy.** The backdrop is a mid-saturation field; the cap and liquid are high-saturation points. Because saturation reads as "importance", a slightly desaturated backdrop makes a small saturated cap dominate a frame it occupies 2% of.
+
+**View transform warning.** This section's hex values assume you know which transform you are on.
+- **Blender 3.6 default: Filmic.** Desaturates and rolls off highlights heavily. A `#FF7A18` backdrop at emission 4 will render noticeably paler and less orange than the swatch. Compensate by picking *more* saturated source colours, or use the **Filmic > High Contrast** look.
+- **Blender 4.0+ default: AgX.** Rolls off even harder and aggressively desaturates bright saturated colours (that is its purpose — it prevents the neon-clipping that Filmic and Standard produce). A saturated orange backdrop under AgX will render distinctly muted. Fixes: raise source saturation, use `Look: AgX - Punchy`, or add a Hue/Saturation node after the ramp with Saturation 1.2–1.4.
+- **Standard** gives you exactly your hex values but will clip and posterise anywhere the splash gets hot. Do not ship a splash shot on Standard.
+
+Decide the transform **before** you pick backdrop colours, and never change it after look-dev is approved.
+
+Finally: put the backdrop, the product, the splash and the fruit into separate **Light Groups** or at minimum separate **Cryptomatte** objects, so the grade can adjust the hierarchy without touching the render.
+
+---
+
+## 10. Texel density, procedural vs baked, and fast assets
+
+### 10.1 Texel density
+
+Texel density = texture pixels per unit of surface. Consistency matters more than the absolute number — mismatched density is why one object looks softer than its neighbour.
+
+| Surface | Density | Practical map size |
+|---|---|---|
+| Hero label (fills 25% of a 4K frame) | **4096 px/m** | 4096×2048 for a 24 cm × 12 cm label |
+| Bottle body (mostly refractive, low detail) | 1024 px/m | 2048² |
+| Fruit (hero, in focus) | 2048 px/m | 2048² per fruit type |
+| Fruit (defocused foreground) | 512 px/m | 1024² |
+| Backdrop sweep | 256 px/m or **procedural** | do not texture it at all |
+
+Rule of thumb for the label specifically: **the label art should have at least 1.5× the pixels it occupies on screen at the tightest shot.** If the label is 900 px wide in a 4K frame, ship 1400+ px of label width. Underrun this and type goes mushy, which is the most visible possible failure.
+
+Use the **TexTools** addon (`Texel Density` panel) or measure manually: apply a checker texture and confirm the squares are the same size across objects.
+
+### 10.2 Procedural vs baked
+
+| Use procedural when | Use baked/image when |
+|---|---|
+| Detail is non-representational (droplets, roughness break-up, noise, moulding grain) | Detail is designed (label art, logos, type) |
+| The surface has bad or no UVs (Mantaflow output, boolean geometry) | You need artist control per pixel |
+| You need it to work at any scale/zoom | You need render speed on a long sequence |
+| You are still iterating | The look is locked |
+
+**Bake when the sequence gets long.** A 250-frame render re-evaluates every procedural node on every sample of every frame. Baking your Voronoi droplets + wetmap + roughness break-up to 2K textures (Cycles > Bake > Diffuse/Roughness/Normal, or use the Node Wrangler / SimpleBake addon) can cut per-frame time 10–20% on a heavy shader. Keep the procedural version in a disabled node group so you can rebake after a note.
+
+**Do not bake:** anything on the splash (its topology changes every frame — there are no stable UVs to bake to). The splash must stay procedural/constant-colour forever.
+
+### 10.3 Getting or faking assets fast
+
+- **HDRIs** (for a reflection environment behind the emissive backdrop): Poly Haven (CC0). A **studio softbox** HDRI plugged into the world at low strength gives the bottle credible rectangular highlights for free. Set world Ray Visibility > Camera **off** so it lights but does not show.
+- **PBR textures**: ambientCG, Poly Haven, texture.ninja (all CC0). You need almost none for this shot — it is a procedural-heavy scene.
+- **Droplet/condensation maps**: search ambientCG for "waterdrops"; or bake your own from §6.2 (better, and matched to your look).
+- **Caustic textures**: render one MNEE frame (§2.4 Fake D), or grab any free caustics EXR loop.
+- **Label art**: Figma/Inkscape → PNG at 4K, or import SVG for resolution-independent type.
+- **Fruit models**: modelling a lime slice properly takes 20 minutes (cylinder, radial segments for segments/pith, inset for the rind) and is better than any free model, because you control where the SSS geometry is closed. Do not download fruit.
+- **The bottle**: model it. A bottle is a profile curve + Screw modifier. Downloaded bottles come with terrible topology that breaks Shrinkwrap, MNEE and Dynamic Paint.
+
+Time budget that works: **1 hour bottle, 30 min label art, 45 min fruit, 30 min backdrop, 3+ hours splash look-dev.** The splash is the job.
+
+---
+
+## 11. Shader debug checklist
+
+Symptom → cause → fix. In diagnosis order.
+
+### "The splash renders BLACK"
+1. `Light Paths > Transmission` is at the default 12. → Set **24–32**, and Total ≥ that. *(fixes it 90% of the time)*
+2. `Light Paths > Total` is lower than Transmission. → Total is a hard cap. Raise Total to 32–48.
+3. Fluid mesh normals are inverted. → Edit Mode `A`, `Shift+N`. Check Overlays > Face Orientation for red faces. Apply scale (`Ctrl+A`).
+4. Splash geometry is co-planar with / inside the bottle glass. → Nudge it out, or make the bottle thin-walled.
+5. There is nothing bright behind the splash for it to refract. → Build the emissive backdrop (§8.2). Add a big top light.
+6. You are in EEVEE without Screen Space Refraction. → Enable it in Render Properties *and* on the material (§1.8).
+7. Still black in patches after all that. → Add the Ray Depth cutoff: `Light Path (Ray Depth) → Math (Greater Than, 4) → Mix Shader → Transparent BSDF`. Deep paths return background instead of black.
+
+### "The splash renders GREY, DULL, MUDDY"
+1. **Clamp Indirect is too low** (0.5–2.0). → Set 8–10, or 0 with Filter Glossy 1.0. This is the most common cause.
+2. Roughness on the Glass BSDF is above 0. → Set **0.0**. Frosted water = grey water.
+3. You added Volume Absorption to a splash. → Remove it (§1.5). Thin sheets + absorption = brown mush.
+4. Glass Color is not white. → Set (1,1,1) or at most (0.92, 0.97, 1.0).
+5. Filter Glossy is at 2.0+. → Drop to 0.5–1.0. Over-filtering blurs away the sparkle.
+6. The denoiser is eating the highlights. → Lower denoise strength, or denoise a light group separately, or raise samples and use OIDN with **prefilter: Accurate** and Albedo/Normal passes on.
+7. There is no hard specular source. → A splash needs at least one **small, bright** light (a thin strip or a small area light) to produce sharp rim highlights. Large soft lights alone make a grey splash.
+8. No caustics. → §2. A splash with a flat, unbroken shadow always looks dead.
+
+### "The bottle liquid looks like coloured plastic"
+1. You tinted **Base Color** instead of using Volume Absorption. → Rebuild per §3.3: white Glass surface + Volume Absorption inside a closed mesh.
+2. `Light Paths > Volume` is 0. → Set **2–4**. Volume Absorption does nothing at 0.
+3. The liquid mesh is not closed/manifold. → `M > By Distance`, `Select > All by Trait > Non Manifold`, cap the top.
+4. Absorption Density is too low for the scene scale. → Density is per unit. A 0.25 m bottle needs density in the tens-to-hundreds (start 90). If you scaled the scene 10×, divide by 10.
+5. No visible **liquid line / meniscus**. → The flat cap disc at the fill level is what tells the eye "this is a liquid with a surface". Without it, the amber looks like tinted plastic all the way up.
+6. There is no darkening gradient with depth. → That is the Volume Absorption signature. If you have absorption and still no gradient, the mesh is probably open (see 3) so rays never accumulate path length.
+7. Black speckle at the liquid/wall boundary. → Coplanar surfaces. Offset the liquid mesh 1 mm inward (§3.2).
+
+### "The label looks pasted on"
+1. It is a texture on the bottle rather than separate geometry. → Separate it, Shrinkwrap + Solidify (§4.1). Real thickness catches a real edge highlight.
+2. No edge/contact darkening at the label boundary. → Solidify gives geometry for AO to work on; also check you have GI (not just direct lighting).
+3. The specular is too perfect. → Add the low-frequency wrinkle noise into the label's Normal (`Noise Scale 6 → Bump Strength 0.08`).
+4. The label is dry while the bottle is wet. → Include the label in the Dynamic Paint canvas / apply the same droplet mask (§5, §6).
+5. Blurry type. → Texel density (§10.1). Increase label map resolution, or import the logo as SVG geometry.
+6. The art repeats around the bottle. → Image Texture `Extension` is set to **Repeat**. Set **Clip** or **Extend**.
+7. Dark fringing on alpha edges. → Alpha mode mismatch (Straight vs Premultiplied) on the Image Texture node, or Transparent bounces too low (raise to 16).
+8. UV stretching distorts the graphics. → UV Editor > Overlays > Display Stretch: Area. Re-unwrap with a single clean vertical seam.
+9. It sits perfectly flat over a curved surface. → The Shrinkwrap target or mode is wrong; use **Nearest Surface Point** with a small positive offset.
+
+### "The fruit looks like rubber"
+1. **Subsurface Radius is too small.** → Lime flesh wants `(0.004, 0.010, 0.003)` metres. Increase until light visibly crosses the slice.
+2. **You are on 4.x and `Subsurface Scale` is 0.05.** → It multiplies Radius, so your 3.6 values collapsed. Set Scale to 1.0, or ×20 your radii.
+3. **There is no backlight.** → SSS is invisible without light behind or grazing. Add a small light behind each slice relative to camera (§7.1). This is usually the real problem.
+4. Subsurface Method is Christensen-Burley. → Switch to **Random Walk** so thin slice edges glow correctly.
+5. The slice has no thickness (single-sided plane). → Random Walk needs a closed volume. Solidify it.
+6. No coat / it is dry. → Fruit in a splash shot must have `Coat Weight 0.5+` and droplets. Dry fruit reads as plastic regardless of SSS.
+7. No surface detail. → Rind needs a Voronoi pit bump (Scale ~220, Bump Strength 0.6); flesh needs a vesicle bump (Voronoi Scale ~90).
+8. Every fruit is the same colour. → `Object Info > Random → ColorRamp → mix into Base Color` at Fac 0.25.
+9. Colour is flat and even. → Add the white pith ring and darken the rind's inner edge. Uniform albedo is a CG tell.
+
+### "Everything is orange, including the splash"
+Correct behaviour — the environment is orange and the splash is a mirror. Fix with a **cool fill**: one weak light at `#BFD8FF`, 5–10% of key strength, from the opposite side, plus optionally a neutral bounce card just out of frame. See §8.4.
+
+### "The render is noisy specifically around the splash"
+Filter Glossy 1.0 → Clamp Indirect 8 → Refraction-BSDF-with-manual-Fresnel rebuild (§1.4 Cheat 3) → lower the refraction IOR to 1.15 → more samples last. In that order; the first three are free.
+
+### "Render times exploded when I added the splash"
+Transmission bounces above ~32 are almost pure cost. Use §1.4 Cheat 4 (`Is Camera Ray` mix to a cheap Refraction BSDF) and the Ray Depth cutoff instead of raising bounces further. Also confirm the splash mesh is not carrying an unnecessary Subdivision modifier at render level — Mantaflow output is already dense.
+
+---
+
+## 12. Quick reference — every number in one place
+
+| Material | Key values |
+|---|---|
+| Splash water | Glass BSDF, white, Roughness **0.0**, IOR **1.33** (cheat 1.15–1.25) |
+| Bottle PET | Principled, white, Roughness **0.05**, IOR **1.46**, Transmission **1.0**, wall 0.4 mm |
+| Amber liquid | Glass IOR **1.35** + Volume Absorption `#FF9A2E`, Density **90**, mesh offset **1 mm** inside |
+| Cap | Base `#E8580F`, Roughness **0.35**, Coat **0.15** |
+| Label | Roughness **0.15** gloss film, Coat **0.35**/rough 0.08, geometry 0.15 mm thick, 0.3 mm proud |
+| Lime flesh | SSS Weight **0.75**, Radius **(0.004, 0.010, 0.003)**, Random Walk, Coat **0.55** |
+| Lime rind | Base `#3E8E1E`, Roughness **0.45**, Coat **0.7**, Voronoi pits Scale **220**, Bump **0.6** |
+| Droplets (procedural) | Voronoi F1 Scale **55**, ramp black at **0.085**, Bump Strength **0.35**, Distance **0.0006** |
+| Backdrop | Emission **4.0**, ramp `#FFB43C` → `#FF7A18` @0.45 → `#C43C00`, B-Spline interpolation |
+| Light Paths | Total **32**, Transmission **24**, Transparent **16**, Volume **2**, Filter Glossy **1.0**, Clamp Indirect **8** |
+
+---
+
+## 13. Look-dev sign-off checklist
+
+Before you call shading done, confirm every one of these in a rendered frame (not the viewport):
+
+- [ ] Splash has **bright rims and dark cores** — not uniform grey.
+- [ ] Splash reads **silver/white**, not orange, despite the orange environment.
+- [ ] Splash shadow on the backdrop is **light and warm**, with visible caustic structure.
+- [ ] Bottle silhouette shows **wall thickness** at the edges.
+- [ ] Amber liquid is **darker at the bottom than the top**.
+- [ ] There is a visible **liquid line** with a meniscus.
+- [ ] Label has an **edge highlight** and a soft contact shadow at its top and bottom.
+- [ ] Label type is **crisp** at the tightest framing.
+- [ ] Bottle is **wetter on the splash side** than the far side.
+- [ ] **Droplets break the bottle's silhouette** in the close-up (real geometry, not bump).
+- [ ] Fruit **glows where it is backlit** and has a wet coat.
+- [ ] Rind **beads** water; flesh carries a **continuous film**. Different behaviours.
+- [ ] Backdrop has a **smooth gradient with no banding** and no visible horizon.
+- [ ] Backdrop is **lighting the product** (kill it and confirm the product goes dark).
+- [ ] The **product's specular is the brightest thing** in frame.
+- [ ] Only **two hues plus neutral** are present.
+- [ ] Foreground droplets/fruit are **defocused with real bokeh**.
+- [ ] Every element is in a **Light Group** or has a **Cryptomatte ID** for comp.

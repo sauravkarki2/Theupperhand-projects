@@ -41,6 +41,18 @@ reference and it is not a detail.
 An ad splash must feel suspended in a void. Open borders are how you get that —
 and deleting escaped particles keeps particle count and bake time down as a bonus.
 
+### 3b. Don't tune the solver. Tune the rig.
+
+Against a fresh Mantaflow liquid domain, the reference changed **exactly two
+settings**: `Resolution Divisions` (32 → 100) and `Border Collisions` (all on →
+all off). FLIP Ratio, CFL, timesteps, particle counts, narrow band, sampling,
+randomness, gravity — all left at stock.
+
+Everything that makes the shot was done with **domain size, emitter animation,
+and force fields**. Learn the solver panel so you know what the defaults are
+doing and when to deviate — but if your splash is the wrong *shape*, the fix is
+almost never in that panel. It's in the rig.
+
 ### 4. Force fields are the art direction. Gravity is not enough.
 
 The reference groups **three** force fields in a collection named `forces`. That
