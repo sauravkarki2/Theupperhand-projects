@@ -1074,3 +1074,490 @@ key(pivot, "rotation_euler", 2, 20, math.radians(  0.0))
 ease(pivot, "rotation_euler", 2, mode='EXPO', easing='EASE_OUT')
 ```
 
+---
+
+## 7. Motion blur — the make-or-break setting for a splash
+
+A splash is fast-moving, thin, high-contrast geometry. Rendered sharp, every frame is a
+crisp sculpture and the animation **strobes**: droplets teleport frame to frame instead of
+streaking. Motion blur is not polish here, it is the difference between "liquid" and
+"flying plastic".
+
+### 7.1 Cycles motion blur settings
+
+| Setting | UI (Render Properties → Motion Blur) | RNA | Value |
+|---|---|---|---|
+| Enable | Motion Blur | `scene.render.use_motion_blur` | **True** |
+| Position | Position | `scene.cycles.motion_blur_position` | **`'CENTER'`** (blur straddles the frame time — matches a real shutter). `'START'`/`'END'` shift it; use `'START'` only to match an external renderer. |
+| **Shutter** | Shutter | `scene.render.motion_blur_shutter` | **0.5** |
+| Rolling Shutter | Rolling Shutter → Type / Duration | `scene.cycles.rolling_shutter_type` = `'NONE'` or `'TOP'`; `scene.cycles.rolling_shutter_duration` 0.0–1.0 | `'NONE'` normally; see 7.3 |
+| Shutter Curve | Shutter Curve widget | `scene.render.motion_blur_shutter_curve` | Leave flat. A ramped curve gives a soft-edged "ghosting" trail. |
+
+**Shutter 0.5 = the 180° rule.** Cinema shutters are open for half of each frame interval.
+`shutter = 0.5` means Cycles samples motion across 0.5 of a frame. At 25 fps that is a
+1/50 s exposure — the standard film look.
+
+| Shutter | Angle | Look |
+|---|---|---|
+| 0.25 | 90° | Crisp, staccato, *Saving Private Ryan*. Splash reads gritty and fast. |
+| **0.5** | **180°** | **Standard. Use this.** |
+| 0.75 | 270° | Dreamy, smeary |
+| 1.0 | 360° | Full smear; adjacent frames overlap completely. Splash becomes fog. |
+
+### 7.2 Per-object motion blur (Cycles)
+
+Object Properties → Motion Blur (visible when Cycles is active):
+
+| Setting | RNA | Note |
+|---|---|---|
+| Motion Blur (per object) | `ob.cycles.use_motion_blur` | Default True. Turn **off** on the backdrop to save memory. |
+| **Deformation** | `ob.cycles.use_deform_motion` | **Must be ON** for anything whose *vertices* move (fluid mesh, cloth, shape keys). Off = only the object transform blurs. |
+| **Steps** | `ob.cycles.motion_steps` | Sub-frame samples. `1` = linear between two sub-frames. Raise to **3** for fast rotation/arcs so the blur curves instead of chording. Memory cost ≈ ×(2^steps−1) copies of the mesh — expensive on a big fluid mesh. |
+
+### 7.3 Rolling shutter
+
+`rolling_shutter_type = 'TOP'` simulates a CMOS sensor scanning top→bottom, so fast horizontal
+motion skews (the "jello" effect). `rolling_shutter_duration` 0 = global shutter, 1 = full
+rolling. Use **0.0 / `'NONE'`** for a clean commercial. Use **0.3–0.5** only if you are
+deliberately matching handheld phone footage or a whip-pan plate shot on a DSLR.
+
+### 7.4 THE classic failure: the fluid mesh does not blur
+
+**Symptom.** The camera and the bottle blur correctly. The splash is razor sharp in every
+frame and strobes horribly. Motion blur is on, deformation motion blur is on, and it still
+does not work.
+
+**Cause.** Cycles builds deformation motion blur by comparing the mesh at sub-frame times and
+interpolating **per-vertex**. That requires the **vertex count and ordering to be identical**
+across those sub-frames. A Mantaflow liquid mesh is **re-meshed from scratch every frame** —
+the vertex count changes constantly. Cycles has nothing to interpolate, silently gives up, and
+renders the mesh static.
+
+**The fix: Speed Vectors.**
+
+*Physics Properties → Fluid (Domain) → Liquid → **Mesh** → **Speed Vectors***
+(`domain_settings.use_speed_vectors = True`)
+
+This makes Mantaflow write a per-vertex **velocity attribute** into the baked mesh. Cycles
+reads that attribute and blurs each vertex along its own velocity vector — **no vertex
+correspondence required**. This is the same mechanism Cycles uses for Alembic/USD caches.
+
+**Requirements and gotchas — all of them matter:**
+
+| Requirement | Detail |
+|---|---|
+| **Mesh must be enabled** | The Speed Vectors checkbox only appears when Domain → Liquid → **Mesh** is on. Particle-only liquid has no mesh to blur. |
+| **You must RE-BAKE** | Enabling Speed Vectors invalidates the mesh cache. *Free Mesh* → *Bake Mesh* (or Free All → Bake All). Toggling it without re-baking changes nothing. |
+| **Cache type** | Works with **Replay / Modular / Final**. If you are on Modular, re-bake the **Mesh** step specifically. |
+| Disk + memory cost | The velocity attribute adds ~30–50 % to the mesh cache size. |
+| `use_deform_motion` | Still enable it on the fluid object. |
+| **Motion steps** | Leave at **1** for fluid. Velocity-based blur is linear anyway, and higher steps multiply memory on an already-huge mesh. |
+| Upres | If you use *Mesh → Upres Factor*, bake speed vectors at the same time; upresing afterwards discards them. |
+
+```python
+import bpy
+dom = bpy.data.objects["FluidDomain"]                 # your domain object
+mod = next(m for m in dom.modifiers if m.type == 'FLUID')
+ds  = mod.domain_settings
+ds.use_mesh          = True
+ds.use_speed_vectors = True      # <-- THE fix. Re-bake the mesh after setting this.
+# Cycles per-object motion blur on the domain:
+dom.cycles.use_motion_blur  = True
+dom.cycles.use_deform_motion= True
+dom.cycles.motion_steps     = 1
+# Scene-level:
+scn = bpy.context.scene
+scn.render.use_motion_blur      = True
+scn.render.motion_blur_shutter  = 0.5
+scn.cycles.motion_blur_position = 'CENTER'
+scn.cycles.rolling_shutter_type = 'NONE'
+```
+
+### 7.5 Alternative: the Vector pass + comp blur
+
+If ray-traced motion blur is too expensive (it can double or triple render time on a heavy
+splash), render **without** motion blur and blur in the compositor.
+
+| Step | Setting |
+|---|---|
+| Enable the pass | View Layer Properties → Passes → Data → **Vector** (`view_layer.use_pass_vector = True`) |
+| **Disable render motion blur** | `scene.render.use_motion_blur = False` — **mandatory**: the Vector pass is not written when motion blur is enabled |
+| Output | Must be **Multilayer OpenEXR** — vectors are 4-channel signed float and will be destroyed by PNG |
+| Comp | Render Layers → **Vector Blur** node (Samples 32, Blur 1.0, Speed min/max 0) |
+
+**Trade-offs:** Vector Blur is a 2D screen-space smear. It cannot blur *behind* a transparent
+surface, it produces artefacts where fast objects cross silhouette edges, and it does nothing
+for blur *seen through* the bottle glass. On a splash-through-glass shot it will show. Use it
+for lookdev and previews; use real Cycles blur for the final. Also note the fluid still needs
+**Speed Vectors** for the fluid mesh's velocities to reach the Vector pass at all.
+
+---
+
+## 8. Cycles settings for this shot
+
+### 8.1 Device
+
+```python
+prefs = bpy.context.preferences.addons['cycles'].preferences
+prefs.compute_device_type = 'OPTIX'     # 'OPTIX'|'CUDA'|'HIP'|'ONEAPI'|'METAL'|'NONE'
+prefs.get_devices()
+for d in prefs.devices:
+    d.use = (d.type in {'OPTIX', 'CUDA', 'HIP', 'ONEAPI', 'METAL'})   # GPU only
+bpy.context.scene.cycles.device = 'GPU'
+```
+
+| Backend | Hardware | Notes |
+|---|---|---|
+| **OptiX** | NVIDIA RTX | Fastest for this scene — hardware ray tracing on a heavy refractive mesh is a huge win. Also unlocks the OptiX denoiser. |
+| CUDA | Any NVIDIA | Fallback; slower than OptiX on RTX cards |
+| HIP | AMD RDNA2+ | Works; MNEE caustics support has historically lagged |
+| oneAPI | Intel Arc | 3.6+ |
+| Metal | Apple Silicon | Good; watch VRAM on unified memory — the fluid mesh competes with everything else |
+
+**Enabling CPU *and* GPU together** speeds up small-tile work slightly but can *slow down*
+heavy scenes (the CPU becomes the straggler on the last tile). For a 1920×1080 splash render:
+**GPU only**.
+
+### 8.2 Sampling
+
+| Setting | RNA | Lookdev | Final |
+|---|---|---|---|
+| Max Samples | `cycles.samples` | 128 | **1024–2048** |
+| Min Samples | `cycles.adaptive_min_samples` | 0 (auto) | 0 (auto) |
+| Adaptive Sampling | `cycles.use_adaptive_sampling` | True | True |
+| **Noise Threshold** | `cycles.adaptive_threshold` | **0.05** | **0.0035–0.005** |
+| Time Limit | `cycles.time_limit` | 20 s/frame | 0 (off) |
+| Seed / Animate Seed | `cycles.seed`, `cycles.use_animated_seed` | — | **`use_animated_seed = True`** |
+| Light Tree (3.5+) | `cycles.use_light_tree` | True | True |
+| Light Sampling Threshold | `cycles.light_sampling_threshold` | 0.01 | 0.01 |
+
+**Adaptive sampling is the real dial, not Max Samples.** `adaptive_threshold` is the per-pixel
+noise level at which Cycles stops. Max Samples is only the ceiling it is allowed to reach.
+Halving the threshold roughly quadruples the samples spent on noisy regions. On a splash the
+water eats the entire budget while the flat backdrop finishes in 16 samples — which is exactly
+what you want.
+
+**`use_animated_seed = True` is not optional for animation.** With a fixed seed, the noise
+pattern is identical every frame, which the denoiser turns into a *static* grain that looks
+like a dirty lens. With an animated seed the residual noise moves and reads as film grain.
+
+### 8.3 Denoising
+
+| Setting | RNA | Value |
+|---|---|---|
+| Denoise (render) | `cycles.use_denoising` | True |
+| Denoiser | `cycles.denoiser` | `'OPENIMAGEDENOISE'` for finals, `'OPTIX'` for viewport |
+| Passes | `cycles.denoising_input_passes` | **`'RGB_ALBEDO_NORMAL'`** |
+| Prefilter (OIDN) | `cycles.denoising_prefilter` | `'ACCURATE'` for finals, `'FAST'` for lookdev |
+| Viewport denoise | `cycles.use_preview_denoising`, `cycles.preview_denoiser` | True, `'OPTIX'` (or `'AUTO'`) |
+| Denoise on GPU (**4.0+**) | `cycles.denoising_use_gpu` | True if you have the VRAM |
+
+| | OptiX denoiser | OpenImageDenoise (OIDN) |
+|---|---|---|
+| Speed | Very fast (GPU, NVIDIA only) | Slower; CPU in 3.6, GPU-capable in 4.0+ |
+| Quality on **water/glass** | Softer; can smear fine droplets and erase caustic sparkle | **Better** — preserves high-frequency specular detail |
+| Temporal stability | Poorer | Poorer, but less bad |
+| Use | Viewport / lookdev | **Final frames** |
+
+**Denoise at render vs denoise in comp**
+
+- **At render** (`use_denoising`): simple, bakes the result into the output. Fine for PNG output.
+- **In comp:** turn scene denoising **off**, enable *View Layer → Passes → Data →
+  **Denoising Data*** (`view_layer.cycles.denoising_store_passes = True`), write **multilayer
+  EXR**, and feed Noisy Image + Denoising Normal + Denoising Albedo into the **Denoise** node.
+  You keep the noisy original forever and can re-denoise without re-rendering. **This is the
+  professional workflow for animation** — you *will* want to retune it.
+
+**Temporal flicker warning.** Cycles has no temporal denoiser. Frame-independent denoising of a
+sparkly splash produces boiling. Mitigations, in order of effectiveness:
+1. Lower the noise threshold (0.0035) so the denoiser has less work to invent.
+2. Raise Max Samples so bright speculars converge.
+3. Denoise in comp with a slightly reduced strength and let a little grain through — grain
+   reads as film, boiling reads as broken.
+4. Externally: run OIDN with motion vectors, or Neat Video, over the sequence.
+
+### 8.4 Light Paths — and why Transmission must go up
+
+Defaults in 3.6: Total 12, Diffuse 4, Glossy 4, Transmission 12, Volume 0, Transparent 8.
+
+**Count the interfaces a single camera ray crosses in this shot:**
+
+```
+camera → splash sheet front (1) → splash sheet back (2)
+       → bottle glass outer  (3) → bottle glass inner (4)
+       → amber liquid enter  (5) → liquid exit        (6)
+       → bottle glass inner  (7) → bottle glass outer (8)
+       → a second splash ligament in front of the backdrop (9)(10)
+       → droplet (11)(12) → ...
+```
+
+**Every refractive interface costs one transmission bounce.** Water/glass/liquid meshes are
+solid volumes with two surfaces each, so bounces are consumed in pairs and they add up
+brutally. When the budget runs out, **Cycles terminates the ray and returns black.** That is
+the origin of the classic *black core in the bottle*, *black patches in the splash*, and
+*dark rings in the droplets*.
+
+| Setting | RNA | Lookdev | **Final** | Why |
+|---|---|---|---|---|
+| **Total** | `cycles.max_bounces` | 12 | **32** | Must be ≥ the largest individual limit |
+| Diffuse | `cycles.diffuse_bounces` | 2 | **4** | Backdrop/label; more adds nothing |
+| Glossy | `cycles.glossy_bounces` | 4 | **10** | Inter-reflections between splash facets and the glass |
+| **Transmission** | `cycles.transmission_bounces` | 8 | **16–24** | **The critical one.** Start at 16; go to 24 if any part of the splash or liquid still reads black. |
+| Volume | `cycles.volume_bounces` | 0 | **2** | Only if the liquid or a fog card uses a Volume shader |
+| **Transparent** | `cycles.transparent_max_bounces` | 8 | **16** | Separate budget: alpha-mapped labels, bubble cards, transparent shadow through the splash. If the splash's *shadow* is opaque black, this is the setting. |
+
+**How to diagnose:** set Transmission to 2 and render — the bottle goes black. Raise it until
+the black disappears, then add 4 for the frames where the splash stacks deeper. Do not just
+set everything to 128: transmission bounces are the most expensive rays in the scene and
+double-digit increases cost real time.
+
+### 8.5 Clamping, Filter Glossy and caustics
+
+| Setting | RNA | Value | Trade-off |
+|---|---|---|---|
+| **Clamp Direct** | `cycles.sample_clamp_direct` | **0.0 (off)** | Clamping direct light dims your strip-light speculars — the whole look. Never clamp direct on a product shot. |
+| **Clamp Indirect** | `cycles.sample_clamp_indirect` | **10.0** default; **0 (off)** for max quality, **5–10** if fireflies are unmanageable | Kills fireflies, *also* kills genuine caustic sparkle in the water. Lowering below ~3 visibly dulls the splash. |
+| **Filter Glossy** | `cycles.blur_glossy` | **0.5** (default 1.0) | Blurs sharp glossy/caustic paths to reduce noise. 1.0 is safe but softens droplet caustics; 0.0 is sharpest and noisiest. **0.5 is the compromise for water.** |
+| Reflective Caustics | `cycles.caustics_reflective` | **True** | Off = flatter, cleaner water |
+| Refractive Caustics | `cycles.caustics_refractive` | **True** | Off = the amber pool of light under the bottle disappears. This is a *look* decision, not a quality one. |
+| Fast GI Approximation | `cycles.use_fast_gi`, `cycles.fast_gi_method` | Lookdev only: `True`, `'REPLACE'`, `ao_bounces_render = 1` | Replaces deep GI with AO. Big speedup, flattens the shot. **Off for finals.** |
+
+**The firefly trade-off, stated plainly:** fireflies are *real* light — a sample that found a
+tiny, extremely bright path (a droplet focusing the strip light into the lens). Clamping is
+lying about that energy. Prefer, in order: (1) more samples / lower threshold,
+(2) make the source physically larger (a 0.12 m strip instead of a 0.02 m one),
+(3) Filter Glossy 0.5, (4) Clamp Indirect 10, (5) Clamp Indirect 3 as a last resort.
+
+### 8.6 Performance settings
+
+| Setting | RNA | Value | Note |
+|---|---|---|---|
+| **Persistent Data** | `scene.render.use_persistent_data` | **True** | **The biggest single win for animation.** Keeps the BVH, textures and geometry in memory between frames. On a scene with a big static bottle + backdrop, saves 20–60 % of total render time. Costs RAM/VRAM. **Caveat:** the fluid mesh changes every frame and *is* re-uploaded, and persistent data has historically leaked memory on long sequences — if RAM climbs frame after frame, turn it off. |
+| Auto Tiles | `cycles.use_auto_tile` | True | |
+| Tile Size | `cycles.tile_size` | **2048** (default). Drop to **1024 / 512** when short on VRAM | Smaller tiles = less peak VRAM, slightly slower |
+| Simplify (viewport) | `render.use_simplify`, `simplify_subdivision` | True, **1** | Viewport only; make sure `simplify_subdivision_render` stays high |
+| Texture Limit (viewport) | `cycles.texture_limit` | `'2048'` | |
+| Texture Limit (render) | `cycles.texture_limit_render` | `'OFF'` | |
+| Film Filter Width | `render.filter_width` | **1.50 px** (default). 1.2 for crisper droplets; 2.0 to soften aliasing on thin ligaments | |
+| Film Transparent | `render.film_transparent` | **False** here — the backdrop is the background | |
+| Pixel Filter type | `cycles.pixel_filter_type` | `'BLACKMAN_HARRIS'` | |
+
+---
+
+## 9. EEVEE / EEVEE Next as an alternative
+
+### 9.1 What you gain and lose
+
+| | Cycles | EEVEE (3.6) / EEVEE Next (4.2+) |
+|---|---|---|
+| Frame time, this shot | 1–6 min @1080p | **1–6 seconds** |
+| True refraction | Yes, unlimited | **No** — screen-space only |
+| Caustics | Yes | **No** (fake with a projected texture) |
+| Reflections of off-screen objects | Yes | **No** — SSR can only reflect what is on screen; needs light/reflection probes |
+| Correct transmission stacking (splash over glass over liquid) | Yes | **No** — one refraction layer, then it falls back to the probe/world |
+| Soft shadows from big area lights | Yes, free | Approximated (`use_soft_shadows`, shadow map res) |
+| Motion blur on a fluid mesh | Yes, via speed vectors | 3.6 EEVEE: accumulation blur, works but no per-vertex velocities; 4.2 EEVEE Next: much better |
+| Verdict for this shot | **Final** | **Lookdev, previz, camera blocking, client WIP** |
+
+**Use EEVEE to block the camera move and time the splash.** Render the final in Cycles.
+
+### 9.2 Making a splash look acceptable in EEVEE 3.6
+
+| Setting | RNA | Value |
+|---|---|---|
+| Screen Space Reflections | `scene.eevee.use_ssr` | **True** |
+| **Refraction** | `scene.eevee.use_ssr_refraction` | **True** (and per-material `mat.use_screen_refraction = True`) |
+| SSR Half Res Trace | `scene.eevee.use_ssr_halfres` | **False** (droplets need full res) |
+| SSR Max Roughness | `scene.eevee.ssr_max_roughness` | 1.0 |
+| SSR Thickness | `scene.eevee.ssr_thickness` | 0.02–0.2 — **tune this**; it is what stops reflections tearing off thin splash sheets |
+| Bloom | `scene.eevee.use_bloom` | True, Threshold 1.0, Intensity 0.02–0.05 |
+| Ambient Occlusion | `scene.eevee.use_gtao` | True, Distance 0.2 |
+| Soft Shadows | `scene.eevee.use_soft_shadows` | True |
+| Shadow Cube / Cascade | `shadow_cube_size`, `shadow_cascade_size` | `'2048'` |
+| Render samples | `scene.eevee.taa_render_samples` | 64–128 |
+| Motion blur | `scene.eevee.use_motion_blur`, `motion_blur_shutter`, `motion_blur_steps` | True, 0.5, 4 |
+
+**Material-side requirements (3.6):** on water/glass materials set
+`mat.use_screen_refraction = True`, `mat.blend_method = 'HASHED'` (or `'BLEND'`),
+`mat.use_backface_culling = True` (removes the double-surface mess), and set
+`mat.refraction_depth` to the object's approximate thickness so the fake refraction offset is
+plausible. Add an **Irradiance Volume + Reflection Cubemap** around the product and bake
+indirect lighting, or your splash will reflect nothing but the world.
+
+**Known limits you cannot fix:** anything outside the camera frustum is not in the screen-space
+buffer, so a splash at the frame edge loses its reflections and goes dark. Compensate by
+raising the world/HDRI strength — EEVEE falls back to the world when the SSR trace misses.
+
+### 9.3 EEVEE Next (Blender 4.2+) differences
+
+| 3.6 EEVEE | 4.2 EEVEE Next |
+|---|---|
+| `scene.eevee.use_bloom` | **Removed.** Bloom is now a **compositor Glare node** (and a real-time viewport compositor option). Scripts that set `use_bloom` will error — guard with `hasattr`. |
+| `use_ssr` / `use_ssr_refraction` | Replaced by a unified **Ray Tracing** panel: `scene.eevee.use_raytracing`, plus `scene.eevee.ray_tracing_options` (`resolution_scale`, `screen_trace_quality`, `screen_trace_thickness`, `trace_max_roughness`, `use_denoise`) |
+| Shadow maps (cube/cascade) | **Virtual shadow maps**: `scene.eevee.use_shadows`, `shadow_ray_count`, `shadow_step_count`, `use_shadow_jitter_viewport`; per-light `light.use_shadow_jitter`, `light.shadow_filter_radius` |
+| No proper AO from ray tracing | GTAO replaced by **horizon-scan / fast GI**; `scene.eevee.fast_gi_method`, `fast_gi_resolution` |
+| Motion blur via `scene.eevee.*` | Uses `scene.render.use_motion_blur` / `motion_blur_shutter`, shared with Cycles |
+| Light probes: Irradiance Volume / Reflection Cubemap | **Volume / Sphere / Plane** probes; irradiance grids bake differently |
+| — | **Shadow/light "Clamp"** settings (`scene.eevee.clamp_surface_direct`, `clamp_surface_indirect`, `clamp_world`) to control fireflies |
+
+EEVEE Next's ray-traced screen-space refraction is genuinely better on a splash than 3.6's, but
+it is still screen-space. It does not change the verdict: **Cycles for finals.**
+
+---
+
+## 10. Colour management — the biggest 3.6 → 4.x gotcha in this whole project
+
+### 10.1 The problem, stated up front
+
+> **A tutorial recorded in Blender 3.6 was graded under the *Filmic* view transform.
+> Blender 4.0+ defaults to *AgX*. If you build this shot in 4.x with the tutorial's light
+> powers and the tutorial's orange backdrop colour, your render WILL NOT look like theirs.**
+> It will be flatter, less saturated, and the orange will drift toward pale peach/white in the
+> bright areas. Nothing is broken. This is the view transform.
+
+### 10.2 The three transforms
+
+| View Transform | Default in | Character |
+|---|---|---|
+| **Standard** | never (opt-in) | sRGB, no tone mapping. Highlights **clip hard** to pure white with an ugly hue shift. Only correct for UI/texture output. |
+| **Filmic** | **3.6** | Wide-latitude film-like roll-off. Desaturates highlights moderately. Slightly milky, lower contrast; the "Filmic look" people compensate for with a Look. Still available in 4.x. |
+| **AgX** | **4.0+** | Much better highlight handling — no hue skew, no magenta clipping on bright lights. Aggressively **desaturates as values approach the top of the range** (that is the point: real film/sensors do this). |
+| Khronos PBR Neutral | 4.2+ (opt-in) | Preserves albedo colour accurately; designed for e-commerce product images. **Worth trying for a product shot** — it keeps saturated colours saturated. |
+| False Color | any | Diagnostic, see 10.5 |
+| Raw | any | No transform at all; for data passes |
+
+### 10.3 Why AgX eats your orange backdrop, and how to compensate
+
+AgX's tone curve pulls chroma toward the achromatic axis as luminance rises. A saturated orange
+emission at strength 2.0 is a *bright, highly-chromatic* value — exactly the case AgX is
+designed to tame. On screen it becomes a softer, sandier orange rather than the electric
+orange of the reference frame.
+
+**Compensations, best first:**
+
+1. **Lower the backdrop's exposure, raise its saturation.** Instead of `emission 3.0` on a
+   medium orange, use `emission 1.2` on a *deeply saturated* orange. AgX desaturates by
+   luminance, so a darker, richer orange survives.
+2. **Use a Look.** `view_settings.look = 'AgX - Punchy'` (4.0) restores contrast and chroma.
+   *Punchy* is the closest thing to the 3.6 Filmic-Medium-High-Contrast look people default to.
+3. **Just set the view transform back to Filmic** — it is still shipped in 4.x. If your goal
+   is to match a 3.6 tutorial frame-for-frame, do this and stop fighting.
+4. **Try Khronos PBR Neutral** (4.2+). It is designed exactly for "saturated product against a
+   saturated background" and holds the orange far better than AgX.
+5. **Grade in comp before the view transform** — a Hue/Saturation node with Saturation 1.15 on
+   the render layer, which is scene-referred, so you are boosting chroma *before* AgX sees it.
+
+**A note on Looks and version differences:** in 4.0 the Look enum identifiers carry the
+transform name (`'AgX - Punchy'`, `'AgX - Medium High Contrast'`); in 3.6 they are
+`'Filmic - Medium High Contrast'` etc.; 4.1+ tidied several of these. **Always set `look`
+inside a try/except** — see the preset script in §12.
+
+### 10.4 Exposure and the Look
+
+| Control | RNA | Use |
+|---|---|---|
+| Exposure | `scene.view_settings.exposure` | Stops of exposure applied **before** the view transform. Use ±0.3 for fine-tuning. **Do not** use it to fix a badly lit scene — fix the lights, or the specular/diffuse relationship goes wrong. |
+| Gamma | `scene.view_settings.gamma` | Leave at 1.0. |
+| Look | `scene.view_settings.look` | Contrast preset. `'Punchy'`/`'Medium High Contrast'` for a commercial. |
+| Use Curves | `scene.view_settings.use_curve_mapping` | A last-resort in-Blender grade. Prefer comp/DaVinci. |
+| Sequencer colour space | `scene.sequencer_colorspace_settings.name` | Only matters if you use the VSE |
+
+### 10.5 False Colour — the only objective way to judge exposure
+
+Set **View Transform → False Color**. The image is remapped to a luminance key:
+
+| Colour | Scene-referred value | Meaning |
+|---|---|---|
+| Black / dark purple | < 0.005 | crushed, no detail |
+| Blue | ~0.02 | deep shadow |
+| **Green** | **0.18** | **middle grey — where your label should sit** |
+| Yellow / orange | 0.5 – 2 | highlights with detail |
+| **Red** | ~4–8 | very hot, near the top |
+| **White** | > ~16 | clipped, no recoverable detail |
+
+**How to use it on this shot:**
+1. Label front face → should be **green** (or green-yellow if you want it bright).
+2. Orange backdrop → **just below** the label; blue-green is right, green is too bright.
+3. Strip-light speculars on the bottle → **thin** yellow/red lines. If they are **thick white
+   bands**, drop strip power — clipped speculars lose the gradient that makes glass look like glass.
+4. The splash → mostly yellow with red/white only on the sharpest rims.
+5. Anything large and **white** = clipped. Anything large and **black** = a hole in your lighting.
+
+Flip back to Filmic/AgX when you are done. Never render out in False Color.
+
+---
+
+## 11. Output
+
+### 11.1 Never render straight to video
+
+| Reason | Detail |
+|---|---|
+| **No resume** | A crash at frame 210 of 250 loses the whole file. With an image sequence you restart at 210. |
+| **No re-grade** | Video is display-referred, 8-bit, chroma-subsampled and already tone-mapped. You cannot recover a blown specular or shift the orange. |
+| **No comp** | Passes (Denoising Data, Vector, Cryptomatte) cannot exist in an MP4. |
+| **No render farm / no parallel machines** | Frame ranges can be split across machines only with sequences. |
+| **Corruption risk** | One bad write and the container is unplayable. |
+
+**Render to an image sequence, then assemble** in the VSE, comp, or an external NLE.
+
+### 11.2 Format choice
+
+| Format | Bits | Colour space | Size/frame @1080p | Use |
+|---|---|---|---|---|
+| PNG 8-bit | 8 | display-referred (view transform **baked in**) | ~1–3 MB | Client WIP, contact sheets. Banding risk in the smooth orange gradient. |
+| **PNG 16-bit** | 16 | display-referred, baked | ~4–8 MB | **Good default for a finished-look sequence.** No banding on the gradient. What the tutorial's `frame 163` almost certainly is. |
+| **OpenEXR half (16-bit float)** | 16f | **scene-referred linear**, view transform **not** baked | ~3–8 MB (DWAA) | **The right answer if you will comp or grade.** Full highlight latitude. |
+| OpenEXR full (32-bit float) | 32f | scene-referred linear | ~12–25 MB | Overkill for beauty; use only for Vector/Position/Depth data passes that need precision |
+| **Multilayer EXR** | 16f/32f | scene-referred | larger | Beauty + Denoising Data + Vector + Cryptomatte in one file. The professional animation output. |
+| JPEG / WebP | 8 | display-referred | small | Previews only |
+| FFmpeg MP4/H.264 | 8 | display-referred | — | **Final delivery only, assembled from the sequence** |
+
+**The distinction that matters:** PNG/JPEG **bake the view transform** — what you see is what
+is saved, and the extra range above 1.0 is gone forever. EXR float saves **linear
+scene-referred** data with the highlights intact; you apply the view transform later in comp.
+If there is any chance of grading, **render EXR half**.
+
+**EXR codec:** `image_settings.exr_codec = 'DWAA'` — lossy but visually indistinguishable and
+3–8× smaller than ZIP. Use `'ZIP'` (lossless) for data passes, `'PIZ'` for grainy content.
+
+### 11.3 Resolution and the 50 % preview workflow
+
+```python
+scn.render.resolution_x = 1920
+scn.render.resolution_y = 1080
+scn.render.resolution_percentage = 50      # lookdev: 960x540, ~4x faster
+# ...final:
+scn.render.resolution_percentage = 100
+```
+
+`resolution_percentage` is the single fastest lookdev lever — 50 % is **4× fewer pixels**.
+Two caveats: (1) noise *looks* lower at 50 % because you are viewing fewer, larger pixels —
+do not tune your noise threshold at 50 %; (2) thin splash ligaments alias badly at 50 % and can
+appear to break up. DOF, motion blur and lighting all evaluate identically, so it is safe for
+everything else.
+
+### 11.4 Frame range and naming
+
+```python
+scn.frame_start, scn.frame_end, scn.frame_step = 1, 250, 1
+scn.render.filepath = "//render/bev_shot01/bev_"      # -> bev_0001.png ... bev_0250.png
+scn.render.use_file_extension = True
+scn.render.use_overwrite      = False   # don't redo finished frames
+scn.render.use_placeholder    = True    # write a stub first -> lets several machines
+                                        #   / instances share one output folder safely
+```
+
+- A trailing underscore matters: without it you get `bev0001.png`.
+- Explicit padding: `"//render/bev_shot01/bev_####"` forces 4-digit padding wherever you want it.
+- **`use_overwrite = False` + `use_placeholder = True`** is how you resume a crashed render and
+  how you run two Blender instances on the same sequence.
+- Keep every version in its own folder (`bev_shot01_v03/`) — never mix versions in one directory.
+
+```bash
+# Headless render of the full range (fastest, no UI overhead)
+blender -b scene.blend -E CYCLES -o //render/bev_shot01/bev_ -F PNG -x 1 -s 1 -e 250 -a
+# Re-render a single fixed frame
+blender -b scene.blend -o //render/bev_shot01/bev_ -F PNG -f 163
+```
+
