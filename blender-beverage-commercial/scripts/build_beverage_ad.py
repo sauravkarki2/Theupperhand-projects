@@ -195,6 +195,30 @@ def move_to_collection(obj, coll_name):
     return obj
 
 
+def iter_fcurves(obj):
+    """Yield an object's F-curves across Blender 3.6 through 5.x.
+
+    Blender 5.x replaced the flat `Action.fcurves` list with a layers /
+    strips / slots hierarchy, so the old attribute raises AttributeError.
+    `keyframe_insert()` is unchanged — only reading the curves back moved.
+    """
+    anim = getattr(obj, "animation_data", None)
+    action = getattr(anim, "action", None)
+    if action is None:
+        return
+    if hasattr(action, "fcurves"):          # 3.6 / 4.x
+        for fcurve in action.fcurves:
+            yield fcurve
+        return
+    for layer in action.layers:             # 5.x
+        for strip in layer.strips:
+            for slot in action.slots:
+                bag = strip.channelbag(slot)
+                if bag:
+                    for fcurve in bag.fcurves:
+                        yield fcurve
+
+
 def keyframe(obj, data_path, frames_values, index=-1, interp="BEZIER"):
     """Set keyframes from [(frame, value), ...] and apply an interpolation mode.
 
@@ -218,14 +242,12 @@ def keyframe(obj, data_path, frames_values, index=-1, interp="BEZIER"):
                                index=index if index >= 0 else -1)
 
     # Apply interpolation to whatever we just created.
-    anim = obj.animation_data
-    if anim and anim.action:
-        for fcurve in anim.action.fcurves:
-            for kp in fcurve.keyframe_points:
-                kp.interpolation = interp
-                if interp == "BEZIER":
-                    kp.handle_left_type = "AUTO_CLAMPED"
-                    kp.handle_right_type = "AUTO_CLAMPED"
+    for fcurve in iter_fcurves(obj):
+        for kp in fcurve.keyframe_points:
+            kp.interpolation = interp
+            if interp == "BEZIER":
+                kp.handle_left_type = "AUTO_CLAMPED"
+                kp.handle_right_type = "AUTO_CLAMPED"
 
 
 # ============================================================================

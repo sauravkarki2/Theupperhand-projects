@@ -84,6 +84,61 @@ in total.
 *wiring code* does not.** Treat its Python as 3.6/4.x reference and rebuild the
 graph against `compositing_node_group` + `NodeGroupOutput` + `ShaderNodeMix`.
 
+### 5. `Action.fcurves` is gone — the slotted animation system
+
+Blender 5.x replaced the flat action with layers, strips and slots. Any 3.6/4.x
+code that reaches for `action.fcurves` raises
+`AttributeError: 'Action' object has no attribute 'fcurves'`.
+
+```python
+# 3.6 / 4.x — BREAKS on 5.x
+for fc in obj.animation_data.action.fcurves:
+    ...
+
+# 5.x
+def iter_fcurves(obj):
+    ad = obj.animation_data
+    if not ad or not ad.action:
+        return
+    for layer in ad.action.layers:
+        for strip in layer.strips:
+            for slot in ad.action.slots:
+                cb = strip.channelbag(slot)
+                if cb:
+                    for fc in cb.fcurves:
+                        yield fc
+```
+
+This bites the moment you set keyframe interpolation in Python — which this
+build does for the emitter's `offset_factor` (LINEAR) and `use_inflow`
+(CONSTANT). Note `keyframe_insert()` itself is unchanged; only *reading back*
+the curves moved.
+
+Useful incidental: boolean keys such as `use_inflow` already default to
+CONSTANT interpolation, so that half needs no correction.
+
+### 6. `Object.field` is None until a field is actually enabled
+
+Creating a plain empty and assigning `obj.field.type` fails with
+`'NoneType' object has no attribute 'type'`. `field` is a pointer that does
+not exist until a force field is turned on, and there is no data-API way to
+turn it on.
+
+```python
+# BREAKS
+ob = bpy.data.objects.new("FLD_vortex", None)
+ob.field.type = "VORTEX"          # AttributeError: field is None
+
+# WORKS — the operator creates the empty and enables the field together
+bpy.ops.object.effector_add(type="VORTEX", location=(0, 0, 0.10))
+ob = bpy.context.object
+ob.name = "FLD_vortex"
+ob.field.strength = 6.0
+```
+
+This is one of the few places where the operator is genuinely required rather
+than merely convenient.
+
 ---
 
 ## Confirmed Cycles defaults on 5.1.2
