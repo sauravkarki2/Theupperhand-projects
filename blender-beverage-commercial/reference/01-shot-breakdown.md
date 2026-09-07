@@ -241,10 +241,19 @@ construction is:
   finite ribbon of water rather than an endless hose.
 - The **three force fields** then shape that ribbon into the final crown.
 
-A second, non-exclusive possibility is Mantaflow's **Guides** sub-panel on the
-domain (guiding weight / size / velocity source), which lets a moving object's
-velocity field steer the liquid. This is the more "correct" tool for literally
-guiding fluid along a path, but it is heavier and less commonly taught.
+**Why it is almost certainly Follow Path and not a Curve Guide force field:**
+Blender ships a `CURVE_GUIDE` force field type, which sounds like the obvious tool
+for "make fluid follow a curve". It does not work for Mantaflow liquid — it is a
+known, documented defect (Blender bug **T97172**): liquid particles spray in a
+single or random direction rather than tracking the curve. Mantaflow is
+effectively unmaintained upstream, so it has not been fixed. The domain's own
+**Guides** sub-panel (guiding weight / size / velocity source) has a separate open
+regression (**#97264**).
+
+That leaves the Follow Path emitter as the only reliable stock-Blender method,
+which is very likely exactly why the tutorial teaches it. The paid **FLIP Fluids**
+addon is the only thing that genuinely rails liquid along a curve — and the panel
+in the screenshot confirms this project is *not* using it.
 
 **The droplet density question:** at Resolution 100 the solver alone will not
 generate the fine airborne droplet field visible in the render. Either (a) the
@@ -289,7 +298,8 @@ are not simulating water, you are engineering one specific frame.
 | Backlight through the liquid | **High** |
 | Emissive gradient backdrop contributing bounce | **High** |
 | Long lens 85–135 mm, real DOF | **High** |
-| Curve + Follow Path emitter as the "follow a curve" technique | **Medium-High** — consistent with blurb, image, and common practice |
+| Curve + Follow Path emitter as the "follow a curve" technique | **High** — consistent with blurb and image, and it is the *only* stock method that works (Curve Guide is broken for Mantaflow, bug T97172) |
+| Creator is **TopChannel1on1** (Gumroad `esmiles.gumroad.com`) | **High** — see `reference/00-source-reconstruction.md` |
 | Whitewater and/or geometry-nodes droplet augmentation | **Medium** |
 | Final render used higher resolution than the 100 shown | **Medium-High** |
 | Vortex + Force + Turbulence as the specific three fields | **Medium** — reasoned, not observed |

@@ -68,6 +68,15 @@ Three things must combine or it doesn't read:
 2. it **throws** (initial velocity along normal),
 3. it **stops** (Use Flow keyed off, with CONSTANT interpolation so it snaps).
 
+> **Do not reach for the Curve Guide force field.** It is documented-broken for
+> Mantaflow liquid — liquid particles spray in a single or random direction
+> instead of following the curve (Blender bug T97172), and Mantaflow is
+> effectively unmaintained, so it is not getting fixed. The domain's own
+> **Guides** sub-panel has a separate open regression (#97264). The Follow Path
+> emitter above is not a workaround for the "proper" tool — with stock Blender it
+> **is** the tool. Only the paid FLIP Fluids addon genuinely rails liquid along
+> a curve.
+
 ### 6. Water is lit by what it reflects.
 
 Water has almost no diffuse response — it is ~95% specular and refractive. A

@@ -549,3 +549,528 @@ print("Light rig built in collections:", RIGCOL, "/ LIGHTS_Water")
 - `light.normalize` (**4.5**) — new option to keep intensity constant when resizing the light.
   If you are on 4.5 and your key changes brightness when you scale it, that's this toggle.
 
+---
+
+## 3. HDRI vs hand-built lights
+
+| | Hand-built rig | Studio-softbox HDRI |
+|---|---|---|
+| Control over each highlight | **Total** — move one light, move one highlight | Coarse: you can only rotate/scale the whole environment |
+| Water / splash reflections | Needs the big white cards of §1.6 | **Excellent out of the box** — a real 360° environment fills every facet of a chaotic splash mesh |
+| Noise | Low (MIS on discrete lights) | Higher, especially with a high-contrast HDRI; needs more samples |
+| Speed to a decent look | Slow | **Instant** |
+| Art-directable | Yes | Only if you build/paint the HDRI |
+| Render cost | Low | Moderate (env sampling on every ray) |
+
+**When the HDRI wins:** the splash. A fluid mesh has thousands of randomly-oriented micro-facets;
+each one mirrors a different direction. With five discrete lights, most facets see *black*, and
+the splash reads dark and dead with a few blown speculars. With a studio HDRI every facet sees
+*something*, and the crown lights up evenly. This is exactly what the reference frame shows:
+a splash that is bright silver-white across its whole surface.
+
+**The recommended hybrid for this shot** — and what most commercial artists actually do:
+
+1. **HDRI in the world** at low-to-moderate strength (0.3–1.0) purely as **specular
+   environment** for the water and glass.
+2. **Hand-built rig on top** for the shapes that must be art-directed (key, strips, kicker).
+3. **HDRI hidden from camera** so the orange gradient backdrop is what you see.
+
+### 3.1 Rotating an HDRI with a Mapping node
+
+```
+Texture Coordinate (Generated) → Mapping (Rotation Z) → Environment Texture → Background → World Output
+```
+
+The `Rotation Z` on the Mapping node spins the environment around the vertical axis; that is
+how you slide a softbox reflection along the bottle without touching a light. **Rotation Z is
+your highlight-position dial.** Keyframe it for a slow drifting shimmer across the glass
+(0.5–3° over the whole 250 frames — any more looks like the world is spinning).
+
+```python
+import bpy, math
+world = bpy.data.worlds.get("World") or bpy.data.worlds.new("World")
+bpy.context.scene.world = world
+world.use_nodes = True
+nt = world.node_tree
+for n in list(nt.nodes):
+    if n.type != 'OUTPUT_WORLD':
+        nt.nodes.remove(n)
+out  = nt.nodes['World Output']
+bg   = nt.nodes.new('ShaderNodeBackground');        bg.location   = (-200, 0)
+env  = nt.nodes.new('ShaderNodeTexEnvironment');    env.location  = (-500, 0)
+map_ = nt.nodes.new('ShaderNodeMapping');           map_.location = (-750, 0)
+tc   = nt.nodes.new('ShaderNodeTexCoord');          tc.location   = (-950, 0)
+
+env.image = bpy.data.images.load("//hdri/studio_softbox_4k.exr")   # your file
+bg.inputs['Strength'].default_value = 0.6
+map_.inputs['Rotation'].default_value[2] = math.radians(35.0)      # THE dial
+
+nt.links.new(tc.outputs['Generated'], map_.inputs['Vector'])
+nt.links.new(map_.outputs['Vector'],  env.inputs['Vector'])
+nt.links.new(env.outputs['Color'],    bg.inputs['Color'])
+nt.links.new(bg.outputs['Background'],out.inputs['Surface'])
+```
+
+> On 4.x, `Texture Coordinate → Generated` into Mapping still works. Some rigs use
+> `Vector → Mapping` with the default; Generated is the reliable one for a world.
+
+### 3.2 Keeping the HDRI out of the visible background
+
+Three options — **they are not equivalent:**
+
+| Method | RNA | Effect | Use when |
+|---|---|---|---|
+| **Film → Transparent** | `scene.render.film_transparent = True` | Alpha-0 background. World still lights and still reflects. | You will comp a background later. **Not** what you want here — you already have a gradient backdrop *object*. |
+| **World Ray Visibility → Camera OFF** | `world.cycles_visibility.camera = False` | World is invisible to primary rays but **still visible in reflections/refractions**. Background renders black (or shows whatever geometry is there — your backdrop). | **This is the right one for this shot.** |
+| **Light Path → Is Camera Ray → Mix** | shader-level | Same as above but you can substitute a *different* colour for camera rays | You want a flat colour behind, while a rich HDRI lights the scene |
+
+```python
+w = bpy.context.scene.world
+w.cycles_visibility.camera      = False   # hide from primary rays
+w.cycles_visibility.diffuse     = True
+w.cycles_visibility.glossy      = True    # <- keep: this is what the water reflects
+w.cycles_visibility.transmission= True
+w.cycles_visibility.scatter     = True
+```
+
+Also worth setting: `world.cycles.sampling_method = 'AUTOMATIC'` (3.6) — or `'MANUAL'` with a
+higher `sample_map_resolution` (1024–2048) if a high-contrast HDRI is producing noise.
+
+---
+
+## 4. The gradient backdrop is a light — treat it as one
+
+The saturated orange→amber seamless backdrop in the reference frame is doing **three jobs**:
+
+1. It is the visible background.
+2. It is the **largest light source in the scene** — an emissive plane subtending a huge solid
+   angle behind and around the product. It is your ambient/fill.
+3. It is the **colour of the shot**. Every diffuse surface picks up its orange bounce; every
+   glossy surface mirrors it. Kill it and the bottle turns grey.
+
+### 4.1 How to drive it
+
+Two builds, pick one:
+
+| Build | How | Pros | Cons |
+|---|---|---|---|
+| **Emissive backdrop** | Backdrop mesh with an `Emission` (or Principled with Emission) driven by a Gradient Texture through a ColorRamp | Exactly the pixels you want; independent of lighting; zero noise on the background itself | It *emits*, so it also lights the product — brightness is coupled to look |
+| **Lit backdrop** | Diffuse/rough backdrop lit by its own dedicated wide area light with a gradient gobo | Photographically honest; reacts to the rig | Harder to get the exact gradient; adds noise |
+
+The reference frame's perfectly smooth, noise-free gradient says **emissive**. Use emissive.
+
+### 4.2 Balancing backdrop emission against the key
+
+This is the single most important exposure relationship in the shot.
+
+| Backdrop emission | Result |
+|---|---|
+| Too low (< 0.5) | Backdrop reads brown/muddy; product looks like it's floating in a dark box; edge lights look neon and detached |
+| **Sweet spot (≈ 1.0–2.5)** | Backdrop sits ~1–1.5 stops **below** the key's diffuse value on the label; product separates; orange bounce warms the bottle's shadow side |
+| Too high (> 4) | Backdrop's own GI washes the product, flattens contrast, **eats the specular contrast of the strip lights**, and the splash loses its silver — everything goes orange |
+
+**The measurement, not the vibe:** with **False Colour** view transform (§10.5), the label
+should sit **green (~0.18 mid-grey)**, the backdrop **just below** it, and the specular hits on
+the glass in the orange/red band (not large white). If your backdrop is greener than your
+label, it is too bright.
+
+**Controls that let you have a bright background without wrecking the product:**
+- Backdrop object → **Ray Visibility → Diffuse OFF** — it stays bright on camera but stops
+  bouncing orange onto everything. Extreme, but a legitimate save.
+- Keep **Glossy ON** — you *want* the orange in the bottle's reflection; that is the shot.
+- Backdrop object → **Cycles → Max Bounces / Shadow OFF** to cut cost.
+- Push the gradient's *bottom* darker with the ColorRamp rather than lowering global strength:
+  a dark floor line under the bottle grounds it without dimming the halo behind it.
+
+**Practical starting values:** backdrop emission **1.8**, key **600 W**, water cards **4.0**.
+If you change backdrop strength, re-check the strip lights immediately — they are the first
+thing to disappear.
+
+---
+
+## 5. Camera
+
+### 5.1 Focal length — why 85–135 mm
+
+| Lens | On a 0.25 m bottle | Verdict |
+|---|---|---|
+| 24–35 mm | Massive perspective; the bottle's vertical edges **converge**, the cap looks tiny, the base bulges. Barrel distortion bends the label. | Never for a hero product |
+| 50 mm | Mild but visible convergence; still slightly "snapshot" | Acceptable for wide establishing beats only |
+| **85 mm** | Near-parallel verticals, natural silhouette, camera ~1.7 m out | **Good** — a touch more depth in the splash |
+| **100 mm** | Essentially orthographic on a 0.25 m subject; camera ~2.0 m out | **The default for this shot** |
+| **135 mm** | Maximum compression; splash layers stack flat and graphic; camera ~2.7 m out | Great for a very graphic, flat, poster-like frame |
+| 200 mm+ | Compression so extreme depth reads as a cutout; camera far away, hard to light around | Only for extreme macro detail beats |
+
+**Why long is right, in three sentences.** (1) **Straight edges stay straight** — a bottle is
+a vertical cylinder and any convergence instantly looks amateur. (2) **Compression flattens
+the silhouette**, so the two strip-light lines run parallel down the sides instead of
+converging, which is the whole look. (3) **Longer lens = narrower FOV = smaller set**: the
+backdrop only has to cover a 0.72 m × 0.41 m window at 2 m instead of a whole room.
+
+**Sensor.** Leave `sensor_width = 36.0 mm` (full-frame, Blender default) and
+`sensor_fit = 'AUTO'`. Every focal-length intuition photographers have is full-frame-based; if
+you change the sensor you invalidate all of it. If you must match a real cinema camera:
+S35 ≈ 24.89 mm, ARRI Alexa Open Gate ≈ 28.25 mm, Micro Four Thirds = 17.3 mm.
+
+### 5.2 Framing geometry (100 mm, 36 mm sensor, 16:9)
+
+Vertical field of view = `2·atan((36 × 9/16) / (2 × 100)) = 11.6°`.
+
+| Camera distance | Frame height | Frame width | 0.25 m bottle fills |
+|---|---|---|---|
+| 1.5 m | 0.304 m | 0.540 m | 82 % — too tight |
+| **2.0 m** | **0.405 m** | **0.720 m** | **62 % — generous headroom, splash breaks both edges** ✔ |
+| 2.5 m | 0.506 m | 0.900 m | 49 % — wide/graphic |
+| 3.0 m | 0.608 m | 1.080 m | 41 % — establishing |
+
+**Use 2.0 m.** That matches the reference framing: bottle centred, slightly low, headroom above
+the cap, splash exceeding both side edges.
+
+### 5.3 Camera height — the hero low angle
+
+| Camera Z | Reads as |
+|---|---|
+| 0.30 m (above the cap) | Looking down — diminutive, "product on a shelf" |
+| 0.13 m (label centre, dead level) | Neutral, catalogue |
+| **0.10–0.12 m (just below label centre)** | **Hero.** The bottle is very slightly above you; the cap gains presence; the backdrop horizon drops so the bottle stands *against* the gradient rather than sitting *on* a floor line |
+| 0.03 m (near the base) | Monumental / heroic-to-a-fault; you start seeing the underside of the splash |
+
+**Use `z = 0.11`.** With the aim point at `z = 0.14`, you get a 0.9° upward tilt — enough to
+read as "looking up" without any keystoning on the vertical edges.
+
+### 5.4 Depth of field
+
+**Blender's DOF is physically real**: `aperture_fstop` is an actual f-number, and depth of
+field follows `H = f²/(N·c) + f`. Computed for **100 mm, subject at 2.0 m, full-frame
+CoC 0.030 mm**:
+
+| f-stop | Total DOF at 2.0 m | Near / far limits | Effect on the shot |
+|---|---|---|---|
+| **f/1.4** | ~32 mm | 1.984 – 2.016 | Only the label face is sharp; the bottle's own curvature goes soft. Too much. |
+| **f/2.0** | ~46 mm | 1.977 – 2.023 | Dreamy; bottle edges soften |
+| **f/2.8** | ~64 mm | 1.969 – 2.032 | Bottle *just* holds (body depth ≈ 70 mm); foreground fruit melts. Very filmic. |
+| **f/4.0** | ~91 mm | 1.955 – 2.047 | **Recommended.** Whole bottle sharp, splash immediately in front/behind softens, flying fruit strongly defocused. Matches the reference. |
+| **f/5.6** | ~128 mm | 1.937 – 2.065 | Safe; splash starts to hold detail |
+| **f/8.0** | ~183 mm | 1.911 – 2.094 | Nearly everything sharp; only the closest fruit blurs |
+| **f/16** | ~370 mm | 1.826 – 2.196 | Effectively deep focus |
+
+**Focus object vs focus distance**
+
+| | `dof.focus_distance` | `dof.focus_object` |
+|---|---|---|
+| What | A scalar in metres along the camera's local −Z | The camera focuses on another object's **origin** |
+| Breaks when | Camera moves (a push-in changes the distance every frame, so the focus plane drifts backward through the product) | Never — the distance is recomputed each frame |
+| Animatable | Yes, but you have to keyframe it in sync with the move | Focus pulls become "animate the empty" |
+
+**Always use a focus Empty.** Create `FOCUS_TGT` (Empty, Plain Axes, radius 0.03) at
+`(0, 0, 0.14)` — the label centre — and set it as `focus_object`. Now:
+- push in, orbit, crane — focus stays locked automatically;
+- a focus pull = keyframe the empty's Y from the splash to the label;
+- parent the empty to the bottle and it follows if the product is ever animated.
+
+**Extra DOF controls**
+- `aperture_blades` — **0 = perfect circular bokeh**. Set **6–8** for polygonal, more
+  photographic highlights. Water droplets become tiny hexagons: very "shot on a Zeiss".
+- `aperture_rotation` — rotates the blade polygon.
+- `aperture_ratio` — **1.0** = circular; **1.6–2.0** = anamorphic oval bokeh. Note this only
+  stretches the *bokeh*, it does not give you anamorphic squeeze or flares.
+
+**The DOF trade-off in a splash shot — read this before committing**
+
+The splash is the most expensive and most detailed asset in the scene. Depth of field
+**destroys the detail you paid for**: the fine crown ridges, the ligaments and the droplets in
+front of and behind the focal plane turn to porridge. Simultaneously it is the thing that
+makes the shot look photographed rather than rendered.
+
+Resolution:
+1. Keep the aperture **moderate (f/4–f/5.6)** so the splash *near the bottle* stays sharp and
+   only the extreme foreground/background elements blur.
+2. Put the **hero splash geometry within ±5 cm of the focus plane** deliberately when you set
+   up the simulation framing. Bokeh should be spent on the flying fruit, not on the crown.
+3. **Do not render DOF at 64 samples.** Defocused bright specular droplets are the #1 source of
+   fireflies (see §13.2).
+4. Consider rendering DOF **off** plus a Z/Cryptomatte pass and applying **Defocus in comp**
+   for a lookdev pass — then re-enable real DOF for the final. In-render DOF is correct
+   (it handles transparency and refraction); comp defocus is fast but wrong through glass.
+
+### 5.5 `bpy` — camera + DOF + focus empty
+
+```python
+# ============================================================================
+# 03_camera.py — hero camera with a focus empty
+# ============================================================================
+import bpy, math
+from mathutils import Vector
+
+HERO_AIM = Vector((0.0, 0.0, 0.14))
+CAM_LOC  = Vector((0.0, -2.0, 0.11))
+
+for n in ("CAM_Hero", "FOCUS_TGT", "CAM_PIVOT"):
+    if n in bpy.data.objects:
+        bpy.data.objects.remove(bpy.data.objects[n], do_unlink=True)
+
+# --- focus target -----------------------------------------------------------
+focus = bpy.data.objects.new("FOCUS_TGT", None)
+focus.empty_display_type = 'PLAIN_AXES'
+focus.empty_display_size = 0.03
+focus.location = HERO_AIM
+bpy.context.scene.collection.objects.link(focus)
+
+# --- orbit pivot (see §6) ---------------------------------------------------
+pivot = bpy.data.objects.new("CAM_PIVOT", None)
+pivot.empty_display_type = 'SPHERE'
+pivot.empty_display_size = 0.08
+pivot.location = HERO_AIM
+bpy.context.scene.collection.objects.link(pivot)
+
+# --- camera -----------------------------------------------------------------
+cdata = bpy.data.cameras.new("CAM_Hero")
+cdata.lens             = 100.0          # mm
+cdata.sensor_fit       = 'AUTO'
+cdata.sensor_width     = 36.0           # full frame
+cdata.clip_start       = 0.05
+cdata.clip_end         = 100.0
+cdata.dof.use_dof          = True
+cdata.dof.focus_object     = focus      # NEVER focus_distance on a moving camera
+cdata.dof.aperture_fstop   = 4.0
+cdata.dof.aperture_blades  = 7          # 0 = circular bokeh; 7 = photographic
+cdata.dof.aperture_rotation= 0.0
+cdata.dof.aperture_ratio   = 1.0        # >1 = oval / pseudo-anamorphic bokeh
+cdata.show_limits          = True       # draw the focus plane in the viewport
+cdata.display_size         = 0.15
+
+cam = bpy.data.objects.new("CAM_Hero", cdata)
+bpy.context.scene.collection.objects.link(cam)
+cam.parent   = pivot                     # local offset from the pivot
+cam.location = CAM_LOC - HERO_AIM        # -> (0, -2.0, -0.03)
+
+# --- aim: Track To beats hand-keyed rotation --------------------------------
+trk = cam.constraints.new('TRACK_TO')
+trk.target     = focus
+trk.track_axis = 'TRACK_NEGATIVE_Z'      # cameras look down local -Z
+trk.up_axis    = 'UP_Y'                  # locks roll to world up
+
+bpy.context.scene.camera = cam
+
+# --- format -----------------------------------------------------------------
+scn = bpy.context.scene
+scn.render.resolution_x = 1920
+scn.render.resolution_y = 1080
+scn.render.resolution_percentage = 100
+scn.render.fps = 25
+scn.frame_start, scn.frame_end = 1, 250
+print("Camera ready: 100mm f/4, focus on FOCUS_TGT, parented to CAM_PIVOT")
+```
+
+**Track To vs Damped Track**
+
+| Constraint | Controls | Use |
+|---|---|---|
+| **Track To** | Aim **and roll** (via `up_axis`) | **Default for a camera.** Horizon stays level. |
+| **Damped Track** | Aim only; roll is whatever it was | Use when you *want* to author roll separately (e.g. a Dutch-angle keyframe on the camera's local Y), or when Track To gimbal-flips as the target passes directly overhead |
+
+> Gimbal flip: Track To will snap 180° if the target crosses the pole defined by `up_axis`.
+> On a crane-up that passes over the product, switch to **Damped Track** + a rotation-constrained
+> parent, or keep the crane below 70° elevation.
+
+---
+
+## 6. Camera animation for a 10-second spot
+
+### 6.1 The four moves, and when each one works
+
+| Move | What it says | Length | Risk |
+|---|---|---|---|
+| **Slow push-in** | "Look closer. This is the product." | 6–10 s (the whole spot) | Boring if too slow to notice, cheap if too fast. Aim for **20–30 % focal coverage change** total. |
+| **Orbit** | "It's real, it's three-dimensional." | 3–6 s, ≤ 40° of arc | A full 360° orbit is a turntable, not an ad. Keep the arc small. |
+| **Crane-up reveal** | "Rising into the hero." Great **into** the splash impact. | 2–4 s | Passing the vertical destroys the Track To up-axis (§5.5 note) |
+| **Whip-pan in** | Energy, impact, transition | 6–14 frames | Needs motion blur or it strobes; needs something to whip *from* |
+
+**The professional default for a beverage spot: a slow push-in with a 15–25° orbit layered on
+top, plus a 3–5 cm crane rise.** Three tiny moves combined read as one rich, expensive move.
+One big move reads as a screensaver.
+
+### 6.2 Why the camera is parented to an empty
+
+For a perfect orbit you rotate the **pivot** (an Empty at the product), not the camera. The
+camera's local offset from the pivot stays constant, so the radius is exactly constant —
+something you will never achieve by keyframing camera XY by hand.
+
+```
+CAM_PIVOT (Empty @ 0,0,0.14)
+   └── CAM_Hero  (local location 0, -2.0, -0.03)  + Track To → FOCUS_TGT
+```
+
+- **Orbit** → keyframe `CAM_PIVOT.rotation_euler.z`
+- **Crane** → keyframe `CAM_PIVOT.location.z`
+- **Push-in** → keyframe `CAM_Hero.location.y` (its local distance) **or** `camera.data.lens`
+  — see §6.4
+- **Roll / Dutch** → keyframe `CAM_Hero.rotation_euler.y` (Track To must be replaced with
+  Damped Track for this to survive)
+
+### 6.3 Concrete keyframe recipes (25 fps, frames 1–250)
+
+**A. The 10-second hero push-in + micro-orbit + crane (recommended)**
+
+| Object | Channel | F1 | F125 | F250 | Interp |
+|---|---|---|---|---|---|
+| `CAM_Hero` | `location.y` (local) | −2.35 | — | **−1.90** | Bezier, **Ease In-Out** |
+| `CAM_PIVOT` | `rotation_euler.z` | **−14°** | — | **+8°** | Bezier, Ease In-Out |
+| `CAM_PIVOT` | `location.z` | 0.10 | — | 0.145 | Bezier, Ease In-Out |
+| `FOCUS_TGT` | `location.y` | −0.05 | — | 0.00 | Bezier (subtle focus settle) |
+
+Net effect: 19 % push, 22° of arc, 4.5 cm rise, over 10 s. Nothing is fast; everything is
+moving. The splash lands around f150–190 while the camera is still creeping forward.
+
+**B. Whip-pan into the product (frames 1–14, then hold)**
+
+| Object | Channel | F1 | F8 | F14 | F20 |
+|---|---|---|---|---|---|
+| `CAM_PIVOT` | `rotation_euler.z` | **−75°** | −18° | **+3°** | **0°** |
+
+Interpolation: F1→F8 **Ease Out** (fast start), F8→F14 **Ease In**, F14→F20 a tiny
+counter-swing overshoot settle. **Motion blur is mandatory** — at 75° in 13 frames you are
+moving ~5.8°/frame; with shutter 0.5 that's a 2.9° smear, which is exactly the streak you want.
+Without blur it strobes into a slideshow.
+
+**C. Crane-up reveal (frames 1–70)**
+
+| Object | Channel | F1 | F70 |
+|---|---|---|---|
+| `CAM_PIVOT` | `location.z` | **−0.22** | **+0.02** |
+| `CAM_Hero` | `location.y` | −2.6 | −2.05 |
+
+Starts below the bottle's base looking up through the splash, rises to the hero angle.
+Keep `CAM_PIVOT.location.z` from exceeding the aim point or Track To will start looking down.
+
+**D. Slow-orbit beauty pass (a separate 5 s cut, frames 1–125)**
+
+| Object | Channel | F1 | F125 |
+|---|---|---|---|
+| `CAM_PIVOT` | `rotation_euler.z` | −20° | +20° |
+
+Linear interpolation is acceptable **only** if the cut is a middle section that will be
+trimmed at both ends; otherwise ease it.
+
+### 6.4 Dolly vs zoom — do not keyframe the focal length by accident
+
+- **Keyframing `location.y` (dolly)** changes perspective: the background scale changes
+  relative to the product. This is a real camera move.
+- **Keyframing `camera.data.lens` (zoom)** does not change perspective at all — just crops.
+  It reads as *cheap* on a product because the bottle's proportions stay frozen.
+- Keyframing **both in opposite directions** = a **dolly zoom / vertigo effect**. Spectacular
+  once per career, wrong in a beverage ad.
+- **Also: changing `lens` changes DOF.** A zoom-in at fixed f-stop gets shallower. If you must
+  zoom, keyframe `aperture_fstop` to compensate.
+
+**Use dolly. Set the lens once and never touch it.**
+
+### 6.5 Easing — the difference between "expensive" and "student"
+
+Blender's default keyframe interpolation is **Bezier** with **auto-clamped** handles, which
+already eases. What ruins camera moves is (a) leaving it on **Linear** (robotic starts/stops)
+or (b) using **Ease In-Out** on *every* channel so the whole move breathes in unison.
+
+| Feel | Setting | When |
+|---|---|---|
+| **Ease In-Out** (`easing='EASE_IN_OUT'`, `interpolation='SINE'` or `'QUAD'`) | slow start, slow stop | The overall push-in — the default |
+| **Ease Out only** | snaps away, glides to rest | Whip-pan, impacts |
+| **Ease In only** | glides in, arrives hard | Camera settling onto a logo |
+| **Linear** | constant speed | Only for a middle section of a longer move that gets cut on both sides |
+| **Bezier + hand-dragged handles** | anything | The real answer for hero work — open the Graph Editor and shape the velocity curve directly |
+
+**Offset your channels.** If the push, orbit and crane all start and stop on the same frames,
+the move reads mechanical. Start the orbit 12 frames after the push and end it 20 frames
+before. That overlap is the entire difference.
+
+**Extra polish:** add a `Noise` F-modifier to `CAM_HERO.rotation_euler` with
+`strength = 0.0015`, `scale = 40` for a whisper of handheld float. On a locked-off product
+this is often what sells "filmed".
+
+### 6.6 `bpy` — orbit + push-in + crane, fully eased
+
+```python
+# ============================================================================
+# 03_camera_anim.py — 250-frame beverage move: push-in + micro-orbit + crane
+# Requires 03_camera.py to have been run (CAM_Hero, CAM_PIVOT, FOCUS_TGT).
+# ============================================================================
+import bpy, math
+
+scn   = bpy.context.scene
+cam   = bpy.data.objects["CAM_Hero"]
+pivot = bpy.data.objects["CAM_PIVOT"]
+focus = bpy.data.objects["FOCUS_TGT"]
+
+scn.frame_start, scn.frame_end, scn.render.fps = 1, 250, 25
+
+def clear_anim(ob):
+    ob.animation_data_clear()
+
+def key(ob, data_path, index, frame, value):
+    if data_path == "location":
+        ob.location[index] = value
+    elif data_path == "rotation_euler":
+        ob.rotation_euler[index] = value
+    ob.keyframe_insert(data_path=data_path, index=index, frame=frame)
+
+def ease(ob, data_path, index, interp='BEZIER', easing='EASE_IN_OUT', mode='SINE'):
+    """Apply interpolation/easing to every key on one channel."""
+    ad = ob.animation_data
+    if not ad or not ad.action:
+        return
+    for fc in ad.action.fcurves:
+        if fc.data_path == data_path and fc.array_index == index:
+            for kp in fc.keyframe_points:
+                kp.interpolation = mode if mode in {
+                    'SINE', 'QUAD', 'CUBIC', 'QUART', 'QUINT',
+                    'EXPO', 'CIRC', 'BACK', 'BOUNCE', 'ELASTIC'} else interp
+                kp.easing        = easing
+                kp.handle_left_type = kp.handle_right_type = 'AUTO_CLAMPED'
+            fc.update()
+
+for ob in (cam, pivot, focus):
+    clear_anim(ob)
+
+# ---- PUSH-IN: camera local Y (distance from pivot) -------------------------
+key(cam,   "location", 1, 1,   -2.35)
+key(cam,   "location", 1, 250, -1.90)
+ease(cam,  "location", 1, mode='SINE', easing='EASE_IN_OUT')
+
+# ---- MICRO-ORBIT: pivot Z rotation, offset in time from the push ----------
+key(pivot, "rotation_euler", 2, 12,  math.radians(-14.0))
+key(pivot, "rotation_euler", 2, 230, math.radians(  8.0))
+ease(pivot,"rotation_euler", 2, mode='SINE', easing='EASE_IN_OUT')
+
+# ---- CRANE: pivot Z height ------------------------------------------------
+key(pivot, "location", 2, 1,   0.100)
+key(pivot, "location", 2, 250, 0.145)
+ease(pivot,"location", 2, mode='SINE', easing='EASE_IN_OUT')
+
+# ---- FOCUS SETTLE: pull from just in front of the label to the label -------
+key(focus, "location", 1, 1,   -0.05)
+key(focus, "location", 1, 160,  0.00)
+ease(focus,"location", 1, mode='SINE', easing='EASE_IN_OUT')
+
+# ---- Optional handheld float ----------------------------------------------
+ADD_HANDHELD = False
+if ADD_HANDHELD:
+    cam.rotation_euler = cam.rotation_euler        # ensure channels exist
+    cam.keyframe_insert("rotation_euler", frame=1)
+    for fc in cam.animation_data.action.fcurves:
+        if fc.data_path == "rotation_euler":
+            m = fc.modifiers.new('NOISE')
+            m.strength, m.scale, m.phase = 0.0015, 40.0, fc.array_index * 7.0
+
+print("Camera animation written: f1-250 @ 25fps")
+```
+
+**Whip-pan variant** (drop in place of the orbit block):
+
+```python
+key(pivot, "rotation_euler", 2, 1,  math.radians(-75.0))
+key(pivot, "rotation_euler", 2, 8,  math.radians(-18.0))
+key(pivot, "rotation_euler", 2, 14, math.radians(  3.0))
+key(pivot, "rotation_euler", 2, 20, math.radians(  0.0))
+ease(pivot, "rotation_euler", 2, mode='EXPO', easing='EASE_OUT')
+```
+

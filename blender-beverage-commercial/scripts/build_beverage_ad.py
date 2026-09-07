@@ -769,6 +769,13 @@ def build_emitter_on_curve(curve_obj=None):
          ribbon with a beginning and an end, not an endless hose.
 
     Miss any one of the three and it doesn't read.
+
+    NOTE ON THE CURVE GUIDE FORCE FIELD: Blender ships a 'CURVE_GUIDE' field type
+    that sounds like the right tool here. It does not work for Mantaflow liquid —
+    documented defect T97172, particles spray in one direction instead of tracking
+    the curve, and Mantaflow is effectively unmaintained upstream. The domain's
+    Guides sub-panel has its own open regression (#97264). Follow Path is not a
+    workaround for the proper tool; with stock Blender it IS the tool.
     """
     if curve_obj is None:
         curve_obj = bpy.data.objects.get("SPLASH_PATH") or build_spiral_curve()
