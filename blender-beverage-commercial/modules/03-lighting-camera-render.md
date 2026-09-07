@@ -1306,6 +1306,12 @@ the origin of the classic *black core in the bottle*, *black patches in the spla
 | Volume | `cycles.volume_bounces` | 0 | **2** | Only if the liquid or a fog card uses a Volume shader |
 | **Transparent** | `cycles.transparent_max_bounces` | 8 | **16** | Separate budget: alpha-mapped labels, bubble cards, transparent shadow through the splash. If the splash's *shadow* is opaque black, this is the setting. |
 
+**Stock Blender defaults, for reference** (what you are raising *from*): Total 12, Diffuse 4,
+Glossy 4, Transmission **12**, Volume 0, Transparent 8. So the Lookdev column above is a
+deliberate *reduction* for speed, and the Final column roughly doubles transmission. If you
+have touched nothing, you are already at 12 — which is enough for a bottle alone and
+marginal once a splash stacks in front of it.
+
 **How to diagnose:** set Transmission to 2 and render — the bottle goes black. Raise it until
 the black disappears, then add 4 for the frames where the splash stacks deeper. Do not just
 set everything to 128: transmission bounces are the most expensive rays in the scene and

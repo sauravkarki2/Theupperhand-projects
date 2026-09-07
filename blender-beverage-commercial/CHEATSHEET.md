@@ -113,6 +113,7 @@ Push-in: y −1.05 → −0.93 across the full range.
 | Samples | 64 | 1024 |
 | Adaptive threshold | 0.05 | 0.01 |
 | **Transmission bounces** | 12 | **24** ⚠ |
+| *(stock default is 12)* | | *module 03 works at 16-24* |
 | Total bounces | 12 | 32 |
 | Transparent bounces | — | 16 |
 | Filter Glossy | — | 1.0 |
