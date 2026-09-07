@@ -133,6 +133,21 @@ orange noticeably.
 
 ---
 
+## Remote-driving hazards
+
+- **Never call `bpy.ops.fluid.bake_data()` over an MCP bridge.** It blocks
+  Blender's main thread, starves the addon socket, and takes Blender down.
+  Set the sim up remotely; press *Bake Data* by hand.
+- Same for any long modal op (`fluid.bake_all`, `ptcache.bake`, animation
+  renders). Single-frame `render.render(write_still=True)` is safe.
+- **Saving converts absolute cache paths to relative.** Keep the fluid cache
+  in a folder beside the .blend.
+- **`obj.dimensions` is stale** inside the script that built the geometry, and
+  **`bound_box` on a bevelled curve reports the un-bevelled box.** Measure
+  evaluated mesh vertices instead.
+
+---
+
 ## The loop
 
 ```

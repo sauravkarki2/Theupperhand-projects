@@ -156,6 +156,33 @@ Read off the live scene, settling the earlier question about what you raise *fro
 
 Confirms the correction made earlier: transmission defaults to **12**, not 8.
 
+### 7. Never trigger a fluid bake through the MCP bridge
+
+`bpy.ops.fluid.bake_data()` called from a bridge `bl_execute` **took Blender
+down**. The socket closed mid-call (`WinError 10054`), and the addon did not come
+back on its own.
+
+Why: the bridge executes on Blender's main thread. `fluid.bake_data` is a modal
+operator that normally spawns a background job driven by the UI event loop. Invoked
+directly from a script with a `temp_override`, it either blocks the main thread for
+the whole bake — starving the addon's socket, which then times out and drops — or
+deadlocks outright.
+
+**The rule:** set the sim up over the bridge, then have the user press *Bake Data*
+in the Physics panel themselves. Everything else about the domain — geometry,
+every solver property, forces, effectors, cache paths, verification — is safe to
+drive remotely. Only the bake itself must be a human click.
+
+The same caution applies to any long modal operator (`fluid.bake_all`,
+`ptcache.bake`, heavy `render.render` animations). A single-frame
+`render.render(write_still=True)` is fine and was used repeatedly here.
+
+Related trap in the same area: **saving the .blend rewrites absolute cache paths
+to relative ones.** A cache at `C:\Users\suche\...` became
+`//..\suche\...` after a save into `C:\Users\Public\`. It still resolves via
+`bpy.path.abspath()`, but it is fragile — keep the fluid cache in a folder beside
+the .blend.
+
 ---
 
 ## Hardware constraints (this machine)
