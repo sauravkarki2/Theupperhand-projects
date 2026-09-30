@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Flow Navy Showreel</title>
+<link rel="stylesheet" href="fonts.css">
+<style>
+  html, body { margin: 0; height: 100%; background: #000; overflow: hidden; }
+  #stage { position: absolute; left: 0; top: 0; width: 1920px; height: 1080px; transform-origin: 0 0; }
+  #stage canvas { position: absolute; inset: 0; width: 1920px; height: 1080px; }
+  body.render #stage { transform: none !important; }
+  #hint { position: fixed; bottom: 12px; left: 50%; transform: translateX(-50%); color: #9fb3d9;
+          font: 500 12px "Space Grotesk", sans-serif; letter-spacing: 3px; opacity: .6; }
+  body.render #hint { display: none; }
+</style>
+</head>
+<body>
+<div id="stage">
+  <canvas id="c3d" width="1920" height="1080"></canvas>
+  <canvas id="c2d" width="1920" height="1080"></canvas>
+</div>
+<div id="hint">SPACE PLAY/PAUSE · ← → SEEK</div>
+<script type="module" src="main.js"></script>
+</body>
+</html>
