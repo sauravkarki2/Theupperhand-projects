@@ -2,7 +2,7 @@
 
 A 32-second, 1920×1080, 60 fps showreel. Every frame is generated in code: Canvas 2D handles the type, HUD and graphic scenes, and three.js handles the 3D ocean and tunnel. The soundtrack is synthesized in code too (120 BPM, D minor), with its hits placed on the video's cuts and slams. No generative video model or audio samples are used.
 
-**Final video:** `out/flownavy_showreel.mp4`
+**Final video:** `out/flownavy_showreel_web.mp4` (H.264 11 Mbps, AAC 320k, 45 MB). The render pipeline below also produces a ~44 Mbps master, `out/flownavy_showreel.mp4`, which is too large for the repo and isn't committed.
 
 - `index.html` / `main.js`: the composition. Open it through any static server to play it live (Space pauses, ← → seek).
 - `storyboard/`: key frames, a contact sheet and shot notes (`node tools/storyboard.mjs`).
