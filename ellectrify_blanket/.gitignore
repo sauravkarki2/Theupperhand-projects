@@ -4,3 +4,4 @@ cache/*
 !cache/.gitkeep
 renders/**/*.png
 out/*.mp4
+__pycache__/
