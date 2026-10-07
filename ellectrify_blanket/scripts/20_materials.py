@@ -118,6 +118,9 @@ g.link(mp, "Vector", sep, "Vector")
 su = g.math("ABSOLUTE", (g.math("SINE", (g.math("MULTIPLY", (sep, "X"), vb=math.pi), 0)), 0))
 sv = g.math("ABSOLUTE", (g.math("SINE", (g.math("MULTIPLY", (sep, "Y"), vb=math.pi), 0)), 0))
 quilt = g.math("MULTIPLY", (su, 0), (sv, 0))
+# meshes may carry a "quilt_flat" point attribute (1 = no puff, e.g. the folded stack's sides)
+flat = g.node("ShaderNodeAttribute", attribute_type="GEOMETRY", attribute_name="quilt_flat")
+quilt = g.math("MULTIPLY", (quilt, 0), (g.math("SUBTRACT", None, (flat, "Fac"), va=1.0), 0))
 g.displace(quilt, 0.009)                                  # 9 mm puff, stitch lines sit low
 g.bump(g.weave(900), 0.15)
 

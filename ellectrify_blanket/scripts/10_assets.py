@@ -91,6 +91,10 @@ for i in range(layers):
     box(bm, (0.55 + dw, 0.45 + dw * .6, th * 0.98), (dx, dy, th * (i + .5)), cuts=22)
 bmesh.ops.remove_doubles(bm, verts=bm.verts, dist=1e-6)
 ob = mesh_object("BLANKET_folded", bm, sub("BLANKET_folded"), smooth=True)
+# quilting only on the top/bottom faces of each layer; the rolled fold edges stay smooth
+attr = ob.data.attributes.new("quilt_flat", "FLOAT", "POINT")
+for v in ob.data.vertices:
+    attr.data[v.index].value = 1.0 if abs(v.normal.z) < 0.7 else 0.0
 add_mod(ob, "BEVEL", "Bevel", width=th * 0.47, segments=8, limit_method="ANGLE")
 add_mod(ob, "SUBSURF", "Subdivision", levels=1, render_levels=1)
 

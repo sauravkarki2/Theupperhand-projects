@@ -229,12 +229,18 @@ def reset_scene(name, frames):
     return sc, code
 
 
-def place(sc, src, name, loc=(0, 0, 0), rot=(0, 0, 0), scale=(1, 1, 1), parent=None):
-    """Linked duplicate of a LIB object (shares mesh data and materials)."""
+def place(sc, src, name, loc=None, rot=None, scale=None, parent=None):
+    """Linked duplicate of a LIB object (shares mesh data and materials).
+    Transforms left as None keep the LIB object's own transform."""
     remove_object(name)
     ob = bpy.data.objects[src].copy()
     ob.name = name
-    ob.location, ob.rotation_euler, ob.scale = loc, rot, scale
+    if loc is not None:
+        ob.location = loc
+    if rot is not None:
+        ob.rotation_euler = rot
+    if scale is not None:
+        ob.scale = scale
     ob.animation_data_clear()
     sc.collection.objects.link(ob)
     if parent is not None:

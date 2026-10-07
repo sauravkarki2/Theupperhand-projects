@@ -5,3 +5,4 @@ cache/*
 renders/**/*.png
 out/*.mp4
 __pycache__/
+blend/blendcache_*/
