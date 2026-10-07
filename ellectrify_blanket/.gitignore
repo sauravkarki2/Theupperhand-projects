@@ -1,0 +1,6 @@
+blend/*.blend
+blend/*.blend1
+cache/*
+!cache/.gitkeep
+renders/**/*.png
+out/*.mp4

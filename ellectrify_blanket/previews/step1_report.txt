@@ -1,0 +1,13 @@
+Blender 5.2.2 LTS
+Cycles devices: CPU only (no OptiX/CUDA GPU found). Settings fall back to CPU + OpenImageDenoise; on the RTX 4080 machine the same scripts switch to OptiX automatically.
+asset check - Ellectrify logo, SVG or transparent PNG: MISSING (0/1 files)
+asset check - Three blanket product photos + Instagram cord image: MISSING (0/4 files)
+asset check - Serif font files, regular and italic: MISSING (0/2 files)
+asset check - Music bed and four sound effects: MISSING (0/5 files)
+test render (1080x1920, 48 samples, simple scene) took 35.9s on CPU
+
+Missing before the build can be finished:
+ - Ellectrify logo, SVG or transparent PNG
+ - Three blanket product photos + Instagram cord image
+ - Serif font files, regular and italic
+ - Music bed and four sound effects
