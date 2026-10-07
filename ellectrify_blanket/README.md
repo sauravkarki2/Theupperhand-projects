@@ -1,28 +1,53 @@
-# Ellectrify Grounding Blanket – Blender build
+# Ellectrify Grounding Blanket – Blender film
 
-Built to `Ellectrify_Blanket_Blender_Spec.pdf` (20 s, 1080×1920, Cycles). Every step is a
-script under `scripts/`, so you can rebuild it. Run the scripts in order from this folder:
+A 20-second, 1080×1920 product film, built entirely in Blender from Python scripts. The scripts follow
+`Ellectrify_Blanket_Blender_Spec.pdf`, covering modelling, materials, cloth, lighting, cameras, the
+Sequencer edit with type and sound, and the H.264/AAC export.
+
+## Run order
+Run these from this folder. Swap `python scripts/X.py` (with the `bpy` module) for
+`blender -b blend/ellectrify_blanket.blend -P scripts/X.py` if you prefer.
 
 ```
-blender -b -P scripts/00_setup.py                                   # step 1: creates blend/
-blender -b blend/ellectrify_blanket.blend -P scripts/10_assets.py
-blender -b blend/ellectrify_blanket.blend -P scripts/20_materials.py
-blender -b blend/ellectrify_blanket.blend -P scripts/p2_material_board.py   # step 2 sign-off
+python scripts/00_setup.py            # version + GPU check, folders, blend, render settings
+python scripts/10_assets.py           # section 6 assets into LIB
+python scripts/20_materials.py        # section 7 materials (pulse colour sampled from the logo if present)
+python scripts/s1_folded.py           # one script per shot (S2 and S5 bake their cloth)
+python scripts/s2_unfurl.py
+python scripts/s3_exploded.py         # also exports label anchors for the edit
+python scripts/s4_snap.py
+python scripts/s5_bed.py
+python scripts/s6_logo.py
+python scripts/80_render.py           # PNG sequences into renders/s1..s6
+python scripts/85_placeholder_audio.py   # only needed until real audio is supplied
+python scripts/90_edit.py             # EDIT scene -> out/ellectrify_blanket_v01.mp4
 ```
+If you rerun `10_assets.py`, rerun the shot scripts afterwards. The shots share the LIB meshes.
 
-(With the `bpy` pip module you can also run `python scripts/<name>.py`.)
+`python scripts/p3_stills.py <SCENE> <frame>...` renders sign-off stills into `previews/stills/`.
 
-## Status
-| Step | State |
+### Quality
+- **Default (`final`)** follows section 5: 1080×1920, 192 samples, 16-bit PNG and a 12 mm cloth grid.
+  It uses OptiX on the RTX 4080.
+- **`ELLECTRIFY_QUALITY=preview`** gives 540×960 renders at 16 samples with a 24 mm cloth grid.
+  The cloud preview was made this way on CPU only. The edit scales it up to 1080×1920.
+
+## Assets
+| Spec item | Status |
 |---|---|
-| 1 Setup | Done. Built on Blender 5.2.2 LTS on CPU (no GPU in the cloud container). On the RTX 4080 the scripts switch to OptiX automatically. `previews/step1_report.txt` |
-| 2 Assets + materials | Built. **Waiting for sign-off:** `previews/step2_material_board.png` |
-| 3–7 | Not started (the spec says to stop at each sign-off) |
+| Logo | **Missing.** S6 shows a `LOGO HERE` placeholder; the pulse uses the expected #F2EE8A |
+| Product photos / cord image | **Missing.** `assets/ref/instagram_grounding_sheets_lines.jpg` is the sheets post (thread scale reference only) |
+| Serif fonts | Playfair Display regular and italic, the spec's stand-in, from Google Fonts |
+| Music + 4 SFX | **Placeholders** synthesised by `85_placeholder_audio.py`. Drop real files named `music_bed`, `rustle`, `tones`, `click`, `hum` into `assets/audio/` and they take over |
 
-## Missing assets (section 3)
-None of these are in `assets/` yet: the logo, the reference photos, the serif fonts, and the audio.
-The pulse colour uses the spec's expected `#F2EE8A` until `20_materials.py` can sample it from the logo.
+When the logo arrives, rerun `20_materials.py`, `s4_snap.py`, `s6_logo.py`, then `80_render.py S4_Snap S6_Logo` and `90_edit.py`.
 
-## Notes on adaptations
-- `MAT_stone` (pale stone floor) and `MAT_sheet_white` (fitted sheet on the mattress) are additions. The bedroom needs them, but section 7 doesn't list them.
-- The pulse is driven by object custom properties `pulse_R`, `pulse_strength` and `snap_pos`, read by Attribute nodes in `MAT_silver_layer`.
+## Deviations from the spec
+- **S3 lens:** 45 mm instead of 70 mm. At 1.5 m a 70 mm lens frames only 0.43 m across in 9:16, which is narrower than the 0.5 m swatch.
+- **S4 fill:** dimmed to 0.3 so the metal reads grey and the soft pulse stays visible. The spec's global fill is 0.6.
+- **Pulse radius:** grows linearly, as the spec states.
+- **Extra materials:** `MAT_stone` for the pale stone floor and `MAT_sheet_white` for the fitted sheet.
+- **Leader lines:** the S3 labels are Sequencer text strips. Their 1 px leaders are a transparent PNG
+  overlay that follows the orbiting camera; the Sequencer has no line strip.
+- **Cloth caches:** they go to `blend/blendcache_ellectrify_blanket/` (Blender's disk cache), not `cache/s2`.
+- **Disclaimer:** the optional S6 disclaimer line is included.
