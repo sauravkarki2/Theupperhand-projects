@@ -1,0 +1,5 @@
+# Heavy, regenerated outputs
+cache/
+renders/
+out/
+blend/*.blend1
