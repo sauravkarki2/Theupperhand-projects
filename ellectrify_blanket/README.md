@@ -6,7 +6,7 @@ Run a script headless:
 
     blender -b -P scripts/00_setup.py
 
-or with the `bpy` module (`pip install bpy==4.5.14`, Python 3.11):
+or with the `bpy` module (`pip install bpy==5.2.1`, Python 3.13, matching the local Blender 5.2.1):
 
     python scripts/00_setup.py
 
