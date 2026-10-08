@@ -101,6 +101,61 @@ class Graph:
         self.mat.displacement_method = "BOTH"
         return d
 
+    def build_reveal(self, cells=(90, 120)):
+        """'Forming from nothing' (S1). Only active on objects whose custom property build_on = 1:
+        behind a noisy diagonal front (object property `build`, about -0.4 -> 1.5) the surface first
+        appears as a see-through thread mesh with a soft white glow, then fills in solid.
+        Uses Generated coordinates, so the pattern stays pinned to the cloth while it moves.
+        Objects without the properties render exactly as before."""
+        on = self.node("ShaderNodeAttribute", attribute_type="OBJECT", attribute_name="build_on")
+        front = self.node("ShaderNodeAttribute", attribute_type="OBJECT", attribute_name="build")
+        sep = self.node("ShaderNodeSeparateXYZ")
+        self.link(self.obj_coords(), "Generated", sep, "Vector")
+        # diagonal sweep from the top-left corner, broken up with noise
+        d = self.math("ADD", (self.math("MULTIPLY", (sep, "X"), vb=0.6), 0),
+                      (self.math("MULTIPLY", (self.math("SUBTRACT", None, (sep, "Y"), va=1.0), 0), vb=0.4), 0))
+        nz = self.node("ShaderNodeTexNoise")
+        nz.inputs["Scale"].default_value = 5.0
+        nz.inputs["Detail"].default_value = 6.0
+        self.link(self.obj_coords(), "Generated", nz, "Vector")
+        d = self.math("ADD", (d, 0), (self.math("MULTIPLY", (self.math("SUBTRACT", (nz, "Fac"), vb=0.5), 0),
+                                                vb=0.45), 0))
+        s = self.math("SUBTRACT", (front, "Fac"), (d, 0))          # > 0 behind the front
+        # thread mesh: thin lines on a cells[0] x cells[1] grid
+        lines = []
+        for axis, n in (("X", cells[0]), ("Y", cells[1])):
+            fr = self.math("FRACT", (self.math("MULTIPLY", (sep, axis), vb=n), 0))
+            dist = self.math("ABSOLUTE", (self.math("SUBTRACT", (fr, 0), vb=0.5), 0))
+            lines.append(self.math("GREATER_THAN", (dist, 0), vb=0.34))
+        threads = self.math("MAXIMUM", (lines[0], 0), (lines[1], 0))
+        zone = self.math("GREATER_THAN", (s, 0), vb=0.0)
+        solid = self.node("ShaderNodeMapRange", interpolation_type="SMOOTHSTEP")
+        solid.inputs["From Min"].default_value = 0.07
+        solid.inputs["From Max"].default_value = 0.18
+        self.link(s, 0, solid, "Value")
+        built = self.math("MAXIMUM", (self.math("MULTIPLY", (threads, 0), (zone, 0)), 0), (solid, "Result"))
+        alpha = self.math("SUBTRACT", None, (self.math("MULTIPLY", (on, "Fac"),
+                                                      (self.math("SUBTRACT", None, (built, 0), va=1.0), 0)), 0), va=1.0)
+        # soft white glow on the newest threads, right at the front
+        band = self.node("ShaderNodeMapRange", interpolation_type="SMOOTHSTEP")
+        band.inputs["From Min"].default_value = 0.08
+        band.inputs["From Max"].default_value = 0.0
+        self.link(s, 0, band, "Value")
+        glow = self.math("MULTIPLY", (self.math("MULTIPLY", (band, "Result"), (zone, 0)), 0),
+                         (self.math("MULTIPLY", (threads, 0), (on, "Fac")), 0))
+        em = self.node("ShaderNodeEmission")
+        em.inputs["Color"].default_value = (1.0, 0.97, 0.93, 1.0)
+        self.link(self.math("MULTIPLY", (glow, 0), vb=2.5), 0, em, "Strength")
+        tr = self.node("ShaderNodeBsdfTransparent")
+        mix = self.node("ShaderNodeMixShader")
+        self.link(alpha, 0, mix, "Fac")
+        self.link(tr, 0, mix, 1)
+        self.link(self.bsdf, "BSDF", mix, 2)
+        add = self.node("ShaderNodeAddShader")
+        self.link(mix, 0, add, 0)
+        self.link(em, 0, add, 1)
+        self.link(add, 0, self.out, "Surface")
+
 
 # ---------------------------------------------------------------- MAT_quilt_cotton
 g = Graph("MAT_quilt_cotton")
@@ -123,6 +178,7 @@ flat = g.node("ShaderNodeAttribute", attribute_type="GEOMETRY", attribute_name="
 quilt = g.math("MULTIPLY", (quilt, 0), (g.math("SUBTRACT", None, (flat, "Fac"), va=1.0), 0))
 g.displace(quilt, 0.009)                                  # 9 mm puff, stitch lines sit low
 g.bump(g.weave(900), 0.15)
+g.build_reveal()
 
 # ---------------------------------------------------------------- MAT_silver_layer (+ pulse)
 g = Graph("MAT_silver_layer")
@@ -158,6 +214,37 @@ g.link(strength, 0, g.bsdf, "Emission Strength")
 pulse_col = sample_logo_yellow()
 g.bsdf.inputs["Emission Color"].default_value = pulse_col or hex_rgba(PULSE_HEX)
 log("pulse colour: " + ("sampled from logo" if pulse_col else f"logo missing, using expected {PULSE_HEX}"))
+g.build_reveal()
+
+# ---------------------------------------------------------------- MAT_thread_streak (S1)
+# Thin ribbons of light that fly in toward the forming blanket. Each ribbon's UV x runs 0 -> 1 along
+# its length; a bright head travels along it as the object property `streak_t` goes 0 -> 1, offset
+# per ribbon by the `phase` attribute. Soft white light - no sparks or arcs.
+g = Graph("MAT_thread_streak")
+g.nt.nodes.remove(g.bsdf)
+uv = g.node("ShaderNodeTexCoord")
+sep = g.node("ShaderNodeSeparateXYZ")
+g.link(uv, "UV", sep, "Vector")
+ph = g.node("ShaderNodeAttribute", attribute_type="GEOMETRY", attribute_name="phase")
+T = g.node("ShaderNodeAttribute", attribute_type="OBJECT", attribute_name="streak_t")
+head = g.math("SUBTRACT", (g.math("MULTIPLY", (T, "Fac"), vb=1.9), 0), (g.math("MULTIPLY", (ph, "Fac"), vb=0.9), 0))
+tail = g.node("ShaderNodeMapRange")                      # 0 at head-0.3 .. 1 at head
+g.link(sep, "X", tail, "Value")
+g.link(g.math("SUBTRACT", (head, 0), vb=0.3), 0, tail, "From Min")
+g.link(head, 0, tail, "From Max")
+before = g.math("LESS_THAN", (sep, "X"), (head, 0))
+across = g.math("SUBTRACT", None, (g.math("MULTIPLY", (g.math("ABSOLUTE", (g.math("SUBTRACT", (sep, "Y"), vb=0.5), 0)), 0),
+                                             vb=2.0), 0), va=1.0)   # soft edges across the ribbon
+a = g.math("MULTIPLY", (g.math("MULTIPLY", (g.math("POWER", (tail, "Result"), vb=2.0), 0), (before, 0)), 0), (across, 0))
+em = g.node("ShaderNodeEmission")
+em.inputs["Color"].default_value = (1.0, 0.97, 0.92, 1.0)
+em.inputs["Strength"].default_value = 2.2
+tr = g.node("ShaderNodeBsdfTransparent")
+mix = g.node("ShaderNodeMixShader")
+g.link(g.math("MULTIPLY", (a, 0), vb=0.55), 0, mix, "Fac")
+g.link(tr, 0, mix, 1)
+g.link(em, 0, mix, 2)
+g.link(mix, 0, g.out, "Surface")
 
 # ---------------------------------------------------------------- MAT_fill
 g = Graph("MAT_fill")
@@ -242,6 +329,10 @@ for obname, mats in ASSIGN.items():
     ob.data.materials.clear()
     for m in mats:
         ob.data.materials.append(bpy.data.materials[m])
+
+for m in bpy.data.materials:            # keep shot-only materials (e.g. MAT_thread_streak) through saves
+    if m.name.startswith("MAT_"):
+        m.use_fake_user = True
 
 log("materials built and assigned")
 save_blend()

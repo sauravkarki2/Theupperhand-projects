@@ -26,9 +26,9 @@ OUT = os.path.join(ROOT, "out")
 QUALITY = os.environ.get("ELLECTRIFY_QUALITY", "final").lower()
 PREVIEW = QUALITY == "preview"
 
-SHOTS = ["S1_Folded", "S2_Unfurl", "S3_Exploded", "S4_Snap", "S5_Bed", "S6_Logo"]
+SHOTS = ["S1_Form", "S2_Unfurl", "S3_Exploded", "S4_Snap", "S5_Bed", "S6_Logo"]
 SHOT_FRAMES = {  # local length in frames (section 9)
-    "S1_Folded": 90, "S2_Unfurl": 135, "S3_Exploded": 150,
+    "S1_Form": 90, "S2_Unfurl": 135, "S3_Exploded": 150,
     "S4_Snap": 90, "S5_Bed": 75, "S6_Logo": 60,
 }
 
@@ -214,7 +214,7 @@ def deg(x):
 
 
 # ---------------------------------------------------------------- shot building
-GLOBAL_START = {"S1_Folded": 1, "S2_Unfurl": 91, "S3_Exploded": 226,
+GLOBAL_START = {"S1_Form": 1, "S2_Unfurl": 91, "S3_Exploded": 226,
                 "S4_Snap": 376, "S5_Bed": 466, "S6_Logo": 541}
 
 

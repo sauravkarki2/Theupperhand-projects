@@ -1,5 +1,5 @@
 """Step 6: render every shot to its PNG sequence: renders/sN/0001.png ...
-Usage: python scripts/80_render.py [S1_Folded S2_Unfurl ...]   (default: all six)
+Usage: python scripts/80_render.py [S1_Form S2_Unfurl ...]   (default: all six)
 Set ELLECTRIFY_QUALITY=preview for the CPU-friendly preview pass."""
 import os
 import sys

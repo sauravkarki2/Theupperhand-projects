@@ -12,7 +12,7 @@ Run these from this folder. Swap `python scripts/X.py` (with the `bpy` module) f
 python scripts/00_setup.py            # version + GPU check, folders, blend, render settings
 python scripts/10_assets.py           # section 6 assets into LIB
 python scripts/20_materials.py        # section 7 materials (pulse colour sampled from the logo if present)
-python scripts/s1_folded.py           # one script per shot (S2 and S5 bake their cloth)
+python scripts/s1_form.py             # one script per shot (S1, S2 and S5 bake their cloth)
 python scripts/s2_unfurl.py
 python scripts/s3_exploded.py         # also exports label anchors for the edit
 python scripts/s4_snap.py
@@ -43,6 +43,11 @@ If you rerun `10_assets.py`, rerun the shot scripts afterwards. The shots share 
 When the logo arrives, rerun `20_materials.py`, `s4_snap.py`, `s6_logo.py`, then `80_render.py S4_Snap S6_Logo` and `90_edit.py`.
 
 ## Deviations from the spec
+- **S1:** replaced "Folded on the plinth" with **S1 Form** (client request). Thin threads of light streak in and
+  the quilt weaves itself out of nothing: a see-through thread mesh behind a soft glowing front fills in solid.
+  The cloth swirls in a circle while the camera orbits the other way. The effect is driven by the object properties
+  `build_on`/`build` (shared cotton and silver materials) and `streak_t` (`MAT_thread_streak`). The light is
+  soft white, with no sparks or arcs. `BLANKET_folded` and `PLINTH` stay in LIB but are no longer used.
 - **Backdrop:** slate blue (`#4E5D6C` wall, `#3E4A56` floor, `#6A7A8A` plinth) instead of cream, at the client's request for more
   contrast. The bedroom wall and floor use the same colours. The S3 labels are off-white to suit it.
   Change the `BACKDROP_WALL`, `BACKDROP_FLOOR` and `PLINTH` values in `20_materials.py` to re-colour every set.
