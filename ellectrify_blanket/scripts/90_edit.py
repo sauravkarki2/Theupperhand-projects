@@ -24,7 +24,7 @@ INK = "#F4F1EA"           # labels: off-white on the slate set
 OFF_WHITE = "#F4F1EA"
 
 LABELS = [  # (key, text, S3 local start frame, align, x, baseline y)  - normalised, y up
-    ("cotton", "Quilted cotton exterior", 85, "RIGHT", 0.94, 0.705),
+    ("cotton", "Quilted cotton exterior", 85, "RIGHT", 0.94, 0.80),
     ("silver", "Silver-thread conductive layer", 100, "RIGHT", 0.94, 0.215),
     ("snap", "Snap-button connection", 115, "LEFT", 0.06, 0.145),
 ]
@@ -38,9 +38,8 @@ sc.render.resolution_x, sc.render.resolution_y, sc.render.resolution_percentage 
 sc.render.fps = 30
 sc.view_settings.view_transform = "Standard"
 se = sc.sequence_editor_create()
-for s in list(se.strips_all):
-    if s.parent_meta is None:
-        se.strips.remove(s)
+for s in list(se.strips):          # top-level strips only; makes reruns replace instead of stack
+    se.strips.remove(s)
 if sc.animation_data:
     sc.animation_data_clear()
 
