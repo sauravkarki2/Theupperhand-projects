@@ -13,7 +13,7 @@ apply_render_settings(sc)
 
 place(sc, "PLINTH", C + "plinth")                          # top at z = 0.9
 blanket = place(sc, "BLANKET_folded", C + "blanket", (0, 0, 0.9), (0, 0, 0.06))
-room(sc, C, wall_y=1.6, floor_mat="MAT_stone")
+room(sc, C, wall_y=1.6)
 shot_light_rig(sc, C, (0, 0, 1.0), key_energy=650)
 
 cam, aim = camera(sc, C + "cam", 50, 4.0, (0, 0, 1.02))

@@ -361,12 +361,12 @@ def window_shadow(sc, name, key, target, frac=0.45):
     return ob
 
 
-def room(sc, code, wall_y=2.0, floor=True, wall_w=12.0, wall_h=6.0, floor_mat="MAT_cream"):
-    """Cream wall behind the product (camera looks along +Y) and a floor."""
+def room(sc, code, wall_y=2.0, floor=True, wall_w=12.0, wall_h=6.0, floor_mat="MAT_backdrop_floor"):
+    """Backdrop wall behind the product (camera looks along +Y) and a floor."""
     import bmesh
     obs = []
     for nm, size, loc, rot, mat in [
-        (code + "wall", (wall_w, wall_h), (0, wall_y, wall_h / 2), (math.radians(90), 0, 0), "MAT_cream"),
+        (code + "wall", (wall_w, wall_h), (0, wall_y, wall_h / 2), (math.radians(90), 0, 0), "MAT_backdrop"),
         (code + "floor", (wall_w, wall_w), (0, wall_y - wall_w / 2, 0), (0, 0, 0), floor_mat),
     ][: 2 if floor else 1]:
         remove_object(nm)

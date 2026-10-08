@@ -14,7 +14,7 @@ from _common import (open_blend, save_blend, reset_scene, camera, key_frames, ro
 open_blend()
 sc, C = reset_scene("S2_Unfurl", 135)
 apply_render_settings(sc)
-room(sc, C, wall_y=2.4, floor_mat="MAT_stone")
+room(sc, C, wall_y=2.4)
 shot_light_rig(sc, C, (0, 0, 1.4), key_energy=900)
 
 # hang vertically in the XZ plane, cotton (+normal) facing the camera (-Y)

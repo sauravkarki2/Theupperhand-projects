@@ -43,10 +43,13 @@ If you rerun `10_assets.py`, rerun the shot scripts afterwards. The shots share 
 When the logo arrives, rerun `20_materials.py`, `s4_snap.py`, `s6_logo.py`, then `80_render.py S4_Snap S6_Logo` and `90_edit.py`.
 
 ## Deviations from the spec
+- **Backdrop:** slate blue (`#4E5D6C` wall, `#3E4A56` floor, `#6A7A8A` plinth) instead of cream, at the client's request for more
+  contrast. The bedroom wall and floor use the same colours. The S3 labels are off-white to suit it.
+  Change the `BACKDROP_WALL`, `BACKDROP_FLOOR` and `PLINTH` values in `20_materials.py` to re-colour every set.
 - **S3 lens:** 45 mm instead of 70 mm. At 1.5 m a 70 mm lens frames only 0.43 m across in 9:16, which is narrower than the 0.5 m swatch.
 - **S4 fill:** dimmed to 0.3 so the metal reads grey and the soft pulse stays visible. The spec's global fill is 0.6.
 - **Pulse radius:** grows linearly, as the spec states.
-- **Extra materials:** `MAT_stone` for the pale stone floor and `MAT_sheet_white` for the fitted sheet.
+- **Extra materials:** `MAT_backdrop`, `MAT_backdrop_floor`, `MAT_plinth` and `MAT_sheet_white` (fitted sheet).
 - **Leader lines:** the S3 labels are Sequencer text strips. Their 1 px leaders are a transparent PNG
   overlay that follows the orbiting camera; the Sequencer has no line strip.
 - **Cloth caches:** they go to `blend/blendcache_ellectrify_blanket/` (Blender's disk cache), not `cache/s2`.

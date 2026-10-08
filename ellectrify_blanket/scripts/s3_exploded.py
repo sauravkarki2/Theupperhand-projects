@@ -16,7 +16,7 @@ from _common import (open_blend, save_blend, reset_scene, place, camera, key_fra
 open_blend()
 sc, C = reset_scene("S3_Exploded", 150)
 apply_render_settings(sc)
-room(sc, C, wall_y=2.6, floor_mat="MAT_stone")
+room(sc, C, wall_y=2.6)
 shot_light_rig(sc, C, (0, 0, 1.0), key_energy=700, rim=True, rim_energy=220)
 
 stack = empty(sc, C + "stack", (0, 0, 1.0), (deg(15), 0, 0))      # tilted 15 deg toward camera

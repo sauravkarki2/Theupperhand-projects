@@ -20,7 +20,7 @@ from _common import (open_blend, save_blend, get_scene, hex_rgba, log, ROOT, ASS
 W, H = 1080, 1920
 FONT_REG = os.path.join(ASSETS, "fonts", "PlayfairDisplay[wght].ttf")
 FONT_ITA = os.path.join(ASSETS, "fonts", "PlayfairDisplay-Italic[wght].ttf")
-INK = "#2E2B28"           # labels on the cream set
+INK = "#F4F1EA"           # labels: off-white on the slate set
 OFF_WHITE = "#F4F1EA"
 
 LABELS = [  # (key, text, S3 local start frame, align, x, baseline y)  - normalised, y up

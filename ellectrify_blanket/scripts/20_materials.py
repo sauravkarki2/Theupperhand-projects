@@ -176,6 +176,12 @@ g = Graph("MAT_cord_white"); g.set(Base_Color=hex_rgba("#F4F4F2"), Roughness=0.4
 g.bsdf.inputs["Subsurface Scale"].default_value = 0.002
 g = Graph("MAT_cream");      g.set(Base_Color=hex_rgba("#EFEAE0"), Roughness=0.7)
 
+# Backdrop: changed from the spec's cream walls to slate blue for contrast with the white quilt
+# and the silver face (client request). Swap these three values to re-colour every set.
+BACKDROP_WALL, BACKDROP_FLOOR, PLINTH = "#4E5D6C", "#3E4A56", "#6A7A8A"
+g = Graph("MAT_backdrop");   g.set(Base_Color=hex_rgba(BACKDROP_WALL), Roughness=0.8)
+g = Graph("MAT_plinth");     g.set(Base_Color=hex_rgba(PLINTH), Roughness=0.7)
+
 # MAT_oak_dark: stretched noise for grain
 g = Graph("MAT_oak_dark")
 g.set(Roughness=0.5)
@@ -193,29 +199,18 @@ ramp.color_ramp.elements[1].color = hex_rgba("#6A5848")
 g.link(n, "Fac", ramp, "Fac")
 g.link(ramp, "Color", g.bsdf, "Base Color")
 
-# MAT_stone: pale stone floor for the bedroom (not in the table; kept neutral and quiet)
-g = Graph("MAT_stone")
+# MAT_backdrop_floor: matte floor a step darker than the wall, with a quiet noise break-up
+g = Graph("MAT_backdrop_floor")
 g.set(Roughness=0.6)
 n = g.node("ShaderNodeTexNoise")
 n.inputs["Scale"].default_value = 3.0
 n.inputs["Detail"].default_value = 10.0
 g.link(g.obj_coords(), "Object", n, "Vector")
 ramp = g.node("ShaderNodeValToRGB")
-ramp.color_ramp.elements[0].color = hex_rgba("#D6D1C7")
-ramp.color_ramp.elements[1].color = hex_rgba("#E4E0D8")
+ramp.color_ramp.elements[0].color = hex_rgba(BACKDROP_FLOOR)
+ramp.color_ramp.elements[1].color = hex_rgba("#465360")
 g.link(n, "Fac", ramp, "Fac")
 g.link(ramp, "Color", g.bsdf, "Base Color")
-
-# lay out every graph so they are readable in the node editor
-for m in bpy.data.materials:
-    if m.name.startswith("MAT_") and m.node_tree:
-        x, y = -1400, 400
-        for nd in m.node_tree.nodes:
-            if nd.type not in ("OUTPUT_MATERIAL", "BSDF_PRINCIPLED", "DISPLACEMENT"):
-                nd.location = (x, y)
-                y -= 200
-                if y < -1000:
-                    y, x = 400, x + 260
 
 # ---------------------------------------------------------------- assignment
 ASSIGN = {
@@ -227,12 +222,12 @@ ASSIGN = {
     "SNAP_stud": ["MAT_steel"],
     "CORD_cap": ["MAT_cord_white", "MAT_steel"],
     "CORD": ["MAT_cord_white"],
-    "PLINTH": ["MAT_cream"],
+    "PLINTH": ["MAT_plinth"],
     "BED_frame": ["MAT_oak_dark"],
     "BED_headboard": ["MAT_oak_dark"],
     "BED_mattress": ["MAT_quilt_cotton"],
-    "BED_wall": ["MAT_cream"],
-    "BED_floor": ["MAT_stone"],
+    "BED_wall": ["MAT_backdrop"],
+    "BED_floor": ["MAT_backdrop_floor"],
 }
 # a plain white fitted sheet for the mattress (no quilting, so the blanket reads on top)
 g = Graph("MAT_sheet_white")
