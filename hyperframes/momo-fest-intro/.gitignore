@@ -1,0 +1,4 @@
+.hyperframes/
+.transcode-cache/
+snapshots/
+node_modules/
