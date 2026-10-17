@@ -2,3 +2,5 @@
 .transcode-cache/
 snapshots/
 node_modules/
+renders/work-*/
+renders/.*-transaction-*/
