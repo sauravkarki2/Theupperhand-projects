@@ -38,7 +38,7 @@ The grade was designed with `hyperframes media-treatment` / `grade-compare`, the
 - `assets/festival-warm.cube` is a 33³ LUT fitted to HyperFrames' own graded frame (mean error ≈0.5/255), applied with ffmpeg `lut3d`, plus `vignette=angle=0.24` on the a-roll.
 - `assets/a-roll-graded.mp4` is the source trimmed to 10s (`first10.mp4`) with the grade baked in.
 - `assets/subject-graded.webm` is the speaker with the background removed (`hyperframes remove-background`, u2net_human_seg → `assets/subject.webm`), graded, alpha kept.
-- `renders/momo-fest-intro-first10.mp4` is the final render (1080×1920, 30fps, 10s).
+- `renders/momo-fest-intro-first10.mp4` is the first-10s render; `renders/momo-fest-full.mp4` is the full edit (1080×1920, 30fps, 148.5s, ~3.8 Mbps).
 
 On a machine with a GPU you can switch back to the live, editable grade: point the `<video>` tags at `first10.mp4` / `assets/subject.webm` and re-apply it with `hyperframes media-treatment --selector "#a-roll" --grading '<json>' --apply`.
 
