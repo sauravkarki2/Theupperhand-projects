@@ -193,13 +193,176 @@
         opacity: 0;
         pointer-events: none;
       }
+
+      /* ---- 10s onward ---- */
+      .subcap {
+        position: absolute;
+        left: 60px;
+        top: 1420px;
+        width: 960px;
+        height: 200px;
+        display: flex;
+        justify-content: center;
+        align-items: flex-start;
+      }
+      .subcap .sub,
+      .cap .sub {
+        display: block;
+        max-width: 900px;
+        text-align: center;
+        font-family: "Inter", sans-serif;
+        font-weight: 800;
+        font-size: 46px;
+        line-height: 1.2;
+        color: var(--ink);
+        background: #fff;
+        padding: 10px 26px 12px;
+        border-radius: 14px;
+      }
+      .cap .kick {
+        display: block;
+        font-family: "Inter", sans-serif;
+        font-weight: 800;
+        font-size: 44px;
+        letter-spacing: 10px;
+        color: var(--saffron);
+        -webkit-text-stroke: 8px var(--ink);
+        paint-order: stroke fill;
+      }
+      .swap .backdrop {
+        position: absolute;
+        inset: 0;
+        background:
+          radial-gradient(120% 70% at 50% 34%, rgba(255, 183, 3, 0.55) 0%, rgba(255, 183, 3, 0) 55%),
+          linear-gradient(165deg, var(--crimson) 0%, #8e0e2c 48%, var(--flag-blue) 100%);
+      }
+      .swap .backdrop.alt {
+        background:
+          radial-gradient(120% 70% at 50% 34%, rgba(255, 183, 3, 0.5) 0%, rgba(255, 183, 3, 0) 55%),
+          linear-gradient(165deg, var(--flag-blue) 0%, #2a1a6e 50%, var(--crimson) 100%);
+      }
+      .swap .rows {
+        position: absolute;
+        left: 0;
+        top: 120px;
+        width: 1080px;
+        height: 1500px;
+        display: flex;
+        flex-direction: column;
+        justify-content: space-between;
+      }
+      .swap .row {
+        width: 4200px;
+        height: 260px;
+        font-family: "Anton", sans-serif;
+        font-size: 250px;
+        line-height: 260px;
+        white-space: nowrap;
+        letter-spacing: 6px;
+        color: transparent;
+        -webkit-text-stroke: 4px rgba(255, 255, 255, 0.55);
+      }
+      .swap .row.solid {
+        color: rgba(255, 255, 255, 0.16);
+        -webkit-text-stroke: 0;
+      }
+      .lt .card {
+        position: absolute;
+        left: 70px;
+        top: 1380px;
+        width: 940px;
+        height: 250px;
+        border-radius: 28px;
+        background: linear-gradient(110deg, var(--crimson) 0%, #a10f33 60%, var(--flag-blue) 100%);
+        box-shadow: 0 24px 60px rgba(0, 0, 0, 0.45);
+        overflow: hidden;
+      }
+      .lt .pin {
+        position: absolute;
+        left: 40px;
+        top: 70px;
+        width: 92px;
+        height: 120px;
+      }
+      .lt .kicker {
+        position: absolute;
+        left: 160px;
+        top: 40px;
+        font-family: "Inter", sans-serif;
+        font-weight: 800;
+        font-size: 30px;
+        letter-spacing: 6px;
+        color: var(--saffron);
+      }
+      .lt .title {
+        position: absolute;
+        left: 160px;
+        top: 88px;
+        width: 760px;
+        font-family: "Anton", sans-serif;
+        font-size: 80px;
+        line-height: 1.2;
+        color: #fff;
+        white-space: nowrap;
+      }
+      .sticker {
+        position: absolute;
+        left: 340px;
+        top: 980px;
+        width: 400px;
+        height: 420px;
+      }
+      .sticker svg {
+        position: absolute;
+        left: 50px;
+        top: 0;
+        width: 300px;
+        height: 240px;
+      }
+      .sticker .label {
+        position: absolute;
+        left: 0;
+        top: 230px;
+        width: 400px;
+        text-align: center;
+        font-family: "Anton", sans-serif;
+        font-size: 150px;
+        line-height: 1.1;
+        color: var(--saffron);
+        -webkit-text-stroke: 10px var(--ink);
+        paint-order: stroke fill;
+      }
+      .lt .shine {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 220px;
+        height: 250px;
+        background: linear-gradient(100deg, rgba(255, 255, 255, 0) 0%, rgba(255, 255, 255, 0.45) 50%, rgba(255, 255, 255, 0) 100%);
+      }
+      #progress {
+        position: absolute;
+        left: 0;
+        top: 0;
+        width: 1080px;
+        height: 10px;
+        background: var(--saffron);
+        transform-origin: 0 50%;
+      }
+      #fade {
+        position: absolute;
+        inset: 0;
+        background: #000;
+        opacity: 0;
+        pointer-events: none;
+      }
     </style>
   </head>
   <body>
-    <div data-hf-id="hf-txxr" id="root" data-composition-id="main" data-start="0" data-duration="10" data-width="1080" data-height="1920">
-      <!-- A-roll: original room, carries the dialogue audio for the full 10s -->
+    <div data-hf-id="hf-txxr" id="root" data-composition-id="main" data-start="0" data-duration="148.5" data-width="1080" data-height="1920">
+      <!-- A-roll: original room, carries the dialogue audio for the whole video -->
       <div data-hf-id="hf-yrcc" id="room-cam" class="cam">
-        <video data-hf-id="hf-dmk3" id="a-roll" class="clip" src="assets/a-roll-graded.mp4" playsinline data-start="0" data-duration="10" data-track-index="0" data-has-audio="true"></video>
+        <video data-hf-id="hf-dmk3" id="a-roll" class="clip" src="assets/a-roll-full-graded.mp4" playsinline data-start="0" data-duration="148.5" data-track-index="0" data-has-audio="true"></video>
       </div>
 
       <!-- Background swap (4.1s–6.1s): matted speaker over a festival backdrop -->
@@ -242,13 +405,104 @@
         </div>
       </div>
 
-      <div data-hf-id="hf-cv4f" id="festival" class="clip" data-start="8.6" data-duration="1.4" data-track-index="4">
+      <div data-hf-id="hf-cv4f" id="festival" class="clip" data-start="8.6" data-duration="4.3" data-track-index="4">
         <div data-hf-id="hf-23r9" class="card" id="fest-card">
           <div data-hf-id="hf-uaep" class="kicker" id="fest-kicker">INTERNATIONAL</div>
           <div data-hf-id="hf-u2g9" class="title" id="fest-title">MOMO FESTIVAL</div>
           <div data-hf-id="hf-quun" class="shine" id="fest-shine"></div>
         </div>
       </div>
+
+      <!-- Background swap (48.6s–61.2s) -->
+      <div id="swap-thanks" class="clip swap" data-start="48.6" data-duration="12.6" data-track-index="1">
+        <div class="backdrop " id="bd-thanks"></div>
+        <div class="rows">
+          <div class="row" id="row-thanks-0">THANK YOU • THANK YOU • THANK YOU •</div>
+          <div class="row solid" id="row-thanks-1">DHANYABAD • DHANYABAD • DHANYABAD •</div>
+          <div class="row" id="row-thanks-2">THANK YOU • THANK YOU • THANK YOU •</div>
+          <div class="row solid" id="row-thanks-3">MOMO FEST • MOMO FEST • MOMO FEST •</div>
+          <div class="row" id="row-thanks-4">THANK YOU • THANK YOU • THANK YOU •</div>
+        </div>
+      </div>
+      <div id="subject-cam-thanks" class="cam subject-cam">
+        <video id="subject-thanks" class="clip" src="assets/subject-thanks-graded.webm" playsinline muted data-start="48.6" data-duration="12.6" data-media-start="0" data-track-index="2"></video>
+      </div>
+
+      <!-- Background swap (119.0s–128.6s) -->
+      <div id="swap-momo" class="clip swap" data-start="119.0" data-duration="9.6" data-track-index="1">
+        <div class="backdrop alt" id="bd-momo"></div>
+        <div class="rows">
+          <div class="row" id="row-momo-0">MOMO • MOMO • MOMO • MOMO • MOMO • MOMO •</div>
+          <div class="row solid" id="row-momo-1">DUMPLINGS • DUMPLINGS • DUMPLINGS •</div>
+          <div class="row" id="row-momo-2">MOMO • MOMO • MOMO • MOMO • MOMO • MOMO •</div>
+          <div class="row solid" id="row-momo-3">DUMPLINGS • DUMPLINGS • DUMPLINGS •</div>
+          <div class="row" id="row-momo-4">MOMO • MOMO • MOMO • MOMO • MOMO • MOMO •</div>
+        </div>
+      </div>
+      <div id="subject-cam-momo" class="cam subject-cam">
+        <video id="subject-momo" class="clip" src="assets/subject-momo-graded.webm" playsinline muted data-start="119.0" data-duration="9.6" data-media-start="0" data-track-index="2"></video>
+      </div>
+
+      <!-- Background swap (143.6s–148.5s) -->
+      <div id="swap-outro" class="clip swap" data-start="143.6" data-duration="4.9" data-track-index="1">
+        <div class="backdrop " id="bd-outro"></div>
+        <div class="rows">
+          <div class="row" id="row-outro-0">DHANYABAD • DHANYABAD • DHANYABAD •</div>
+          <div class="row solid" id="row-outro-1">JWAJALAPA • JWAJALAPA • JWAJALAPA •</div>
+          <div class="row" id="row-outro-2">THANK YOU • THANK YOU • THANK YOU •</div>
+          <div class="row solid" id="row-outro-3">JWAJALAPA • JWAJALAPA • JWAJALAPA •</div>
+          <div class="row" id="row-outro-4">DHANYABAD • DHANYABAD • DHANYABAD •</div>
+        </div>
+      </div>
+      <div id="subject-cam-outro" class="cam subject-cam">
+        <video id="subject-outro" class="clip" src="assets/subject-outro-graded.webm" playsinline muted data-start="143.6" data-duration="4.9" data-media-start="0" data-track-index="2"></video>
+      </div>
+
+      <div id="sub-s1" class="subcap clip" data-start="15.37" data-duration="2.26" data-track-index="3">
+        <span class="sub" id="sub-s1-t">I'm making this video today.</span>
+      </div>
+      <div id="sub-s2" class="subcap clip" data-start="42.22" data-duration="6.36" data-track-index="3">
+        <span class="sub" id="sub-s2-t">I'm so grateful to all of you.</span>
+      </div>
+      <div id="sub-s3" class="subcap clip" data-start="109.15" data-duration="2.52" data-track-index="3">
+        <span class="sub" id="sub-s3-t">Please give us your blessings.</span>
+      </div>
+      <div id="cap-fest" class="cap clip" data-start="30.31" data-duration="11.4" data-track-index="3">
+        <span class="kick" id="cf-k">INTERNATIONAL</span>
+        <div class="line"><span class="w hot" id="cf-w1">Dumpling</span></div>
+        <div class="line"><span class="w" id="cf-w2">Festival</span></div>
+        <span class="sub" id="cf-sub">I'm here at the International Dumpling Festival.</span>
+      </div>
+      <div id="cap-thanks" class="cap clip" data-start="48.9" data-duration="12.1" data-track-index="3">
+        <div class="line"><span class="w" id="ct-w1">Huge</span><span class="w hot" id="ct-w2">thanks</span></div>
+        <span class="sub" id="ct-sub">to the International Dumpling Festival team</span>
+      </div>
+      <div id="cap-momo" class="cap clip" data-start="119.36" data-duration="9.1" data-track-index="3">
+        <div class="line"><span class="w hot" id="cm-w1">Momos!</span></div>
+        <span class="sub" id="cm-sub">We ate momos and taught the kids how to make them.</span>
+      </div>
+      <div id="cap-outro" class="cap clip" data-start="143.97" data-duration="4.53" data-track-index="3">
+        <div class="line"><span class="w" id="co-w1">Thank</span><span class="w hot" id="co-w2">you!</span></div>
+        <span class="sub" id="co-sub">Thanks so much for watching.</span>
+      </div>
+      <div id="sticker-momo" class="sticker clip" data-start="63.83" data-duration="3.2" data-track-index="4">
+        <svg viewBox="0 0 300 240" id="momo-svg">
+          <path d="M20 200 C 20 120, 90 40, 150 22 C 210 40, 280 120, 280 200 C 230 228, 70 228, 20 200 Z" fill="#fbe7c6" stroke="#0b0b10" stroke-width="10" stroke-linejoin="round"/>
+          <path d="M150 22 C 140 70, 110 110, 80 140 M150 22 C 150 80, 150 120, 150 150 M150 22 C 160 70, 190 110, 220 140" fill="none" stroke="#0b0b10" stroke-width="8" stroke-linecap="round"/>
+          <ellipse cx="150" cy="22" rx="18" ry="12" fill="#fbe7c6" stroke="#0b0b10" stroke-width="8"/>
+        </svg>
+        <div class="label" id="momo-label">MOMO</div>
+      </div>
+      <div id="loc" class="lt clip" data-start="135.74" data-duration="5.6" data-track-index="4">
+        <div class="card" id="loc-card">
+          <svg class="pin" viewBox="0 0 92 120" id="loc-pin"><path d="M46 4 C 22 4, 6 22, 6 44 C 6 74, 46 116, 46 116 C 46 116, 86 74, 86 44 C 86 22, 70 4, 46 4 Z" fill="#ffb703" stroke="#0b0b10" stroke-width="6"/><circle cx="46" cy="44" r="15" fill="#0b0b10"/></svg>
+          <div class="kicker" id="loc-kicker">INTERNATIONAL DUMPLING FESTIVAL</div>
+          <div class="title" id="loc-title">QUEEN VICTORIA MARKET</div>
+          <div class="shine" id="loc-shine"></div>
+        </div>
+      </div>
+      <div id="progress"></div>
+      <div id="fade"></div>
 
       <div data-hf-id="hf-hmg5" id="flash"></div>
     </div>
@@ -309,6 +563,101 @@
       tl.fromTo("#fest-kicker", { opacity: 0, x: -30 }, { opacity: 1, x: 0, duration: 0.25, ease: "power2.out" }, 8.75);
       tl.fromTo("#fest-title", { opacity: 0, y: 40 }, { opacity: 1, y: 0, duration: 0.3, ease: "back.out(1.8)" }, 8.82);
       tl.fromTo("#fest-shine", { x: -260 }, { x: 1000, duration: 0.6, ease: "power2.inOut" }, 9.15);
+
+
+      // ===================== 10s onward =====================
+      // Zoom rhythm: punch to a new framing at each phrase, slow drift inside it
+      const SHOTS = [[10.0, 13.6, 1.12, 2], [13.66, 15.3, 1.3, 4], [15.37, 19.5, 1.06, 0], [19.63, 22.3, 1.22, 3], [22.41, 30.2, 1.08, 1], [30.31, 36.0, 1.04, 0], [36.0, 42.1, 1.2, 3], [42.22, 48.6, 1.32, 4], [61.2, 63.8, 1.06, 0], [63.83, 72.4, 1.18, 3], [72.48, 80.4, 1.06, 0], [80.44, 88.4, 1.24, 3], [88.43, 92.8, 1.08, 1], [92.89, 99.6, 1.2, 3], [99.7, 104.0, 1.06, 0], [104.0, 109.1, 1.28, 4], [109.15, 112.5, 1.1, 1], [112.59, 119.0, 1.22, 3], [128.6, 132.9, 1.06, 0], [133.0, 135.7, 1.3, 4], [135.74, 141.7, 1.08, 1], [141.74, 143.6, 1.2, 3]];
+      SHOTS.forEach(([a, b, sc, yp], i) => {
+        const fromSwap = i > 0 && SHOTS[i - 1][1] < a - 1;
+        if (fromSwap || i === 0) {
+          tl.to("#room-cam", { scale: sc + 0.14, yPercent: yp, duration: 0.01, ease: "none" }, a);
+          tl.to("#room-cam", { scale: sc, yPercent: yp, duration: 0.5, ease: "expo.out" }, a + 0.01);
+        } else {
+          tl.to("#room-cam", { scale: sc, yPercent: yp, duration: 0.2, ease: "power3.out" }, a);
+        }
+        const t0 = a + 0.5;
+        if (b - t0 > 0.3) tl.to("#room-cam", { scale: sc + 0.04, duration: b - t0, ease: "none" }, t0);
+      });
+
+      // Background swaps: hide the room, flash in, drift the type, flash out
+      tl.set("#room-cam", { opacity: 0 }, 48.6);
+      tl.set("#room-cam", { opacity: 1 }, 61.2);
+      tl.fromTo("#flash", { opacity: 0 }, { opacity: 0.9, duration: 0.08, ease: "none", immediateRender: false }, 48.52);
+      tl.to("#flash", { opacity: 0, duration: 0.3, ease: "power2.out" }, 48.6);
+      tl.fromTo("#flash", { opacity: 0 }, { opacity: 0.85, duration: 0.07, ease: "none", immediateRender: false }, 61.13);
+      tl.to("#flash", { opacity: 0, duration: 0.3, ease: "power2.out" }, 61.2);
+      tl.fromTo("#subject-cam-thanks", { scale: 1.18, yPercent: 4 }, { scale: 1.04, yPercent: 0, duration: 0.45, ease: "back.out(1.6)" }, 48.6);
+      tl.to("#subject-cam-thanks", { scale: 1.12, duration: 12.15, ease: "sine.inOut" }, 49.05);
+      tl.fromTo("#bd-thanks", { scale: 1.15 }, { scale: 1.0, duration: 12.6, ease: "power1.out" }, 48.6);
+      tl.fromTo(["#row-thanks-0", "#row-thanks-2", "#row-thanks-4"], { x: 0 }, { x: -2016, duration: 12.6, ease: "none" }, 48.6);
+      tl.fromTo(["#row-thanks-1", "#row-thanks-3"], { x: -2316 }, { x: -300, duration: 12.6, ease: "none" }, 48.6);
+      tl.set("#room-cam", { opacity: 0 }, 119.0);
+      tl.set("#room-cam", { opacity: 1 }, 128.6);
+      tl.fromTo("#flash", { opacity: 0 }, { opacity: 0.9, duration: 0.08, ease: "none", immediateRender: false }, 118.92);
+      tl.to("#flash", { opacity: 0, duration: 0.3, ease: "power2.out" }, 119.0);
+      tl.fromTo("#flash", { opacity: 0 }, { opacity: 0.85, duration: 0.07, ease: "none", immediateRender: false }, 128.53);
+      tl.to("#flash", { opacity: 0, duration: 0.3, ease: "power2.out" }, 128.6);
+      tl.fromTo("#subject-cam-momo", { scale: 1.18, yPercent: 4 }, { scale: 1.04, yPercent: 0, duration: 0.45, ease: "back.out(1.6)" }, 119.0);
+      tl.to("#subject-cam-momo", { scale: 1.12, duration: 9.15, ease: "sine.inOut" }, 119.45);
+      tl.fromTo("#bd-momo", { scale: 1.15 }, { scale: 1.0, duration: 9.6, ease: "power1.out" }, 119.0);
+      tl.fromTo(["#row-momo-0", "#row-momo-2", "#row-momo-4"], { x: 0 }, { x: -1536, duration: 9.6, ease: "none" }, 119.0);
+      tl.fromTo(["#row-momo-1", "#row-momo-3"], { x: -1836 }, { x: -300, duration: 9.6, ease: "none" }, 119.0);
+      tl.set("#room-cam", { opacity: 0 }, 143.6);
+      tl.fromTo("#flash", { opacity: 0 }, { opacity: 0.9, duration: 0.08, ease: "none", immediateRender: false }, 143.52);
+      tl.to("#flash", { opacity: 0, duration: 0.3, ease: "power2.out" }, 143.6);
+      tl.fromTo("#subject-cam-outro", { scale: 1.18, yPercent: 4 }, { scale: 1.04, yPercent: 0, duration: 0.45, ease: "back.out(1.6)" }, 143.6);
+      tl.to("#subject-cam-outro", { scale: 1.12, duration: 4.45, ease: "sine.inOut" }, 144.05);
+      tl.fromTo("#bd-outro", { scale: 1.15 }, { scale: 1.0, duration: 4.9, ease: "power1.out" }, 143.6);
+      tl.fromTo(["#row-outro-0", "#row-outro-2", "#row-outro-4"], { x: 0 }, { x: -784, duration: 4.9, ease: "none" }, 143.6);
+      tl.fromTo(["#row-outro-1", "#row-outro-3"], { x: -1084 }, { x: -300, duration: 4.9, ease: "none" }, 143.6);
+
+      // Subtitle pills
+      slideUp("#sub-s1-t", 15.37);
+      tl.to("#sub-s1-t", { opacity: 0, y: -16, duration: 0.18, ease: "power1.in" }, 17.43);
+      slideUp("#sub-s2-t", 42.22);
+      tl.to("#sub-s2-t", { opacity: 0, y: -16, duration: 0.18, ease: "power1.in" }, 48.38);
+      slideUp("#sub-s3-t", 109.15);
+      tl.to("#sub-s3-t", { opacity: 0, y: -16, duration: 0.18, ease: "power1.in" }, 111.47);
+
+      // Keyword captions
+      tl.fromTo("#cf-k", { opacity: 0, scale: 1.25 }, { opacity: 1, scale: 1, duration: 0.4, ease: "power3.out" }, 30.31);
+      pop("#cf-w1", 30.7);
+      pop("#cf-w2", 31.2);
+      slideUp("#cf-sub", 32.0);
+      tl.to("#cap-fest .kick, #cap-fest .line", { opacity: 0, y: -20, duration: 0.2, ease: "power1.in" }, 35.6);
+      tl.to("#cf-sub", { opacity: 0, y: -16, duration: 0.18, ease: "power1.in" }, 41.5);
+      pop("#ct-w1", 48.9);
+      pop("#ct-w2", 49.3);
+      slideUp("#ct-sub", 50.0);
+      tl.to("#cap-thanks .line, #ct-sub", { opacity: 0, y: -20, duration: 0.2, ease: "power1.in" }, 60.75);
+      pop("#cm-w1", 119.36);
+      slideUp("#cm-sub", 120.2);
+      tl.to("#cap-momo .line, #cm-sub", { opacity: 0, y: -20, duration: 0.2, ease: "power1.in" }, 128.2);
+      pop("#co-w1", 143.97);
+      pop("#co-w2", 144.4);
+      slideUp("#co-sub", 145.0);
+
+      // Momo sticker
+      tl.fromTo("#momo-svg", { scale: 0, rotation: -25 }, { scale: 1, rotation: 0, duration: 0.5, ease: "back.out(2.2)" }, 63.83);
+      tl.fromTo("#momo-svg", { y: 0 }, { y: -18, duration: 0.35, ease: "sine.inOut", yoyo: true, repeat: 5, immediateRender: false }, 64.4);
+      pop("#momo-label", 64.1);
+      tl.to("#sticker-momo svg, #momo-label", { opacity: 0, scale: 0.8, duration: 0.2, ease: "power1.in" }, 66.8);
+
+      // Location lower-third
+      tl.fromTo("#loc-card", { xPercent: -110, rotation: -4 }, { xPercent: 0, rotation: 0, duration: 0.4, ease: "expo.out" }, 135.74);
+      tl.fromTo("#loc-pin", { y: -80, opacity: 0 }, { y: 0, opacity: 1, duration: 0.45, ease: "bounce.out" }, 135.9);
+      tl.fromTo("#loc-kicker", { opacity: 0, x: -30 }, { opacity: 1, x: 0, duration: 0.25, ease: "power2.out" }, 136.0);
+      tl.fromTo("#loc-title", { opacity: 0, y: 40 }, { opacity: 1, y: 0, duration: 0.3, ease: "back.out(1.8)" }, 136.1);
+      tl.fromTo("#loc-shine", { x: -260 }, { x: 1000, duration: 0.6, ease: "power2.inOut" }, 136.5);
+      tl.to("#loc-card", { xPercent: 110, duration: 0.35, ease: "power2.in" }, 141.0);
+
+      // Festival card from the intro holds until the line ends, then exits
+      tl.to("#fest-card", { xPercent: 110, duration: 0.35, ease: "power2.in" }, 12.5);
+
+      // Progress bar + fade to black
+      tl.fromTo("#progress", { scaleX: 0 }, { scaleX: 1, duration: 148.5, ease: "none" }, 0);
+      tl.fromTo("#fade", { opacity: 0 }, { opacity: 1, duration: 0.45, ease: "power1.in" }, 148.05);
 
       window.__timelines["main"] = tl;
     </script>
