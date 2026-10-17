@@ -1,6 +1,6 @@
-# Momo Festival intro — first 10s (HyperFrames)
+# Momo Festival vlog edit (HyperFrames)
 
-HyperFrames edit of the first 10 seconds of `VID-20261016-WA0001.mp4` (vertical 1080×1920).
+HyperFrames edit of `VID-20261016-WA0001.mp4` (vertical 1080×1920, 148.5s). The first 10s were built first; the rest continues in the same style.
 
 | Time | What happens |
 | --- | --- |
@@ -11,6 +11,26 @@ HyperFrames edit of the first 10 seconds of `VID-20261016-WA0001.mp4` (vertical 
 | 6.1s | Flash + punch-out back into the room |
 | 7.84s | **TODAY...** pop caption |
 | 8.6–10s | Punch-in + **INTERNATIONAL MOMO FESTIVAL** lower-third with shine sweep |
+
+### 10s → end
+
+| Time | What happens |
+| --- | --- |
+| throughout | Zoom rhythm: a new framing (wide / medium / tight) punches in at each phrase, with a slow drift inside it; saffron progress bar across the top |
+| 10–12.8s | "International Momo Festival" card holds, then exits |
+| 15.4s | Subtitle: "I'm making this video today." |
+| 30.3–41.7s | Kinetic title **INTERNATIONAL / DUMPLING / FESTIVAL** + "I'm here at the International Dumpling Festival." |
+| 42.2s | Subtitle: "I'm so grateful to all of you." |
+| 48.6–61.2s | Background swap (picture-in-picture card on the crimson/blue backdrop, "THANK YOU • DHANYABAD" type): **HUGE THANKS** "to the International Dumpling Festival team" |
+| 63.8s | Animated momo sticker |
+| 109.2s | Subtitle: "Please give us your blessings." |
+| 119–128.6s | Background swap (PiP card, "MOMO • DUMPLINGS" type): **MOMOS!** "We ate momos and taught the kids how to make them." |
+| 135.7–141.3s | Location lower-third: 📍 **QUEEN VICTORIA MARKET** · International Dumpling Festival |
+| 143.6–148.5s | Outro swap: **THANK YOU!** "Thanks so much for watching." then fade to black |
+
+Captions after 10s come from a machine translation of the Nepali audio (Whisper small, two passes cross-checked) and only appear where the passes agreed. Long stretches (≈63–108s) are left uncaptioned on purpose rather than guessed. **Review before publishing:** "Queen Victoria Market" is inferred from "Queens Victoria", and the speaker also names team members (heard as "Raju" and "Maniz") who are left out of the thank-you caption.
+
+`assets/a-roll-full-graded.mp4` is the full video at 30fps with the same baked grade.
 
 Color grade (both the a-roll and the matted subject): `skin-soft` preset at 0.72, with more contrast, highlights pulled down, warmer, a little more vibrance, and a light vignette on the a-roll.
 The grade was designed with `hyperframes media-treatment` / `grade-compare`, then **baked into the footage** so rendering doesn't need WebGL (in a GPU-less container the live shader grade took ~95 min per render; baked, it takes ~40s):

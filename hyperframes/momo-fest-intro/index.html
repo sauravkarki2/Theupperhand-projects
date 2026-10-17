@@ -340,6 +340,25 @@
         height: 250px;
         background: linear-gradient(100deg, rgba(255, 255, 255, 0) 0%, rgba(255, 255, 255, 0.45) 50%, rgba(255, 255, 255, 0) 100%);
       }
+      .pip {
+        position: absolute;
+        left: 119px;
+        top: 150px;
+        width: 842px;
+        height: 1497px;
+        border-radius: 44px;
+        overflow: hidden;
+        border: 10px solid #fff;
+        box-shadow: 0 40px 90px rgba(0, 0, 0, 0.55);
+        opacity: 0;
+      }
+      .pip video {
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+      }
       #progress {
         position: absolute;
         left: 0;
@@ -424,8 +443,8 @@
           <div class="row" id="row-thanks-4">THANK YOU • THANK YOU • THANK YOU •</div>
         </div>
       </div>
-      <div id="subject-cam-thanks" class="cam subject-cam">
-        <video id="subject-thanks" class="clip" src="assets/subject-thanks-graded.webm" playsinline muted data-start="48.6" data-duration="12.6" data-media-start="0" data-track-index="2"></video>
+      <div id="subject-cam-thanks" class="pip">
+        <video id="subject-thanks" class="clip" src="assets/a-roll-full-graded.mp4" playsinline muted data-start="48.6" data-duration="12.6" data-media-start="48.6" data-track-index="2"></video>
       </div>
 
       <!-- Background swap (119.0s–128.6s) -->
@@ -439,8 +458,8 @@
           <div class="row" id="row-momo-4">MOMO • MOMO • MOMO • MOMO • MOMO • MOMO •</div>
         </div>
       </div>
-      <div id="subject-cam-momo" class="cam subject-cam">
-        <video id="subject-momo" class="clip" src="assets/subject-momo-graded.webm" playsinline muted data-start="119.0" data-duration="9.6" data-media-start="0" data-track-index="2"></video>
+      <div id="subject-cam-momo" class="pip">
+        <video id="subject-momo" class="clip" src="assets/a-roll-full-graded.mp4" playsinline muted data-start="119.0" data-duration="9.6" data-media-start="119.0" data-track-index="2"></video>
       </div>
 
       <!-- Background swap (143.6s–148.5s) -->
@@ -454,8 +473,8 @@
           <div class="row" id="row-outro-4">DHANYABAD • DHANYABAD • DHANYABAD •</div>
         </div>
       </div>
-      <div id="subject-cam-outro" class="cam subject-cam">
-        <video id="subject-outro" class="clip" src="assets/subject-outro-graded.webm" playsinline muted data-start="143.6" data-duration="4.9" data-media-start="0" data-track-index="2"></video>
+      <div id="subject-cam-outro" class="pip">
+        <video id="subject-outro" class="clip" src="assets/a-roll-full-graded.mp4" playsinline muted data-start="143.6" data-duration="4.9" data-media-start="143.6" data-track-index="2"></video>
       </div>
 
       <div id="sub-s1" class="subcap clip" data-start="15.37" data-duration="2.26" data-track-index="3">
@@ -587,8 +606,8 @@
       tl.to("#flash", { opacity: 0, duration: 0.3, ease: "power2.out" }, 48.6);
       tl.fromTo("#flash", { opacity: 0 }, { opacity: 0.85, duration: 0.07, ease: "none", immediateRender: false }, 61.13);
       tl.to("#flash", { opacity: 0, duration: 0.3, ease: "power2.out" }, 61.2);
-      tl.fromTo("#subject-cam-thanks", { scale: 1.18, yPercent: 4 }, { scale: 1.04, yPercent: 0, duration: 0.45, ease: "back.out(1.6)" }, 48.6);
-      tl.to("#subject-cam-thanks", { scale: 1.12, duration: 12.15, ease: "sine.inOut" }, 49.05);
+      tl.fromTo("#subject-cam-thanks", { scale: 1.25, rotation: 0 }, { scale: 1, rotation: 3, duration: 0.55, ease: "back.out(1.4)" }, 48.6);
+      tl.to("#subject-cam-thanks", { scale: 1.04, rotation: -2, duration: 12.05, ease: "sine.inOut" }, 49.15);
       tl.fromTo("#bd-thanks", { scale: 1.15 }, { scale: 1.0, duration: 12.6, ease: "power1.out" }, 48.6);
       tl.fromTo(["#row-thanks-0", "#row-thanks-2", "#row-thanks-4"], { x: 0 }, { x: -2016, duration: 12.6, ease: "none" }, 48.6);
       tl.fromTo(["#row-thanks-1", "#row-thanks-3"], { x: -2316 }, { x: -300, duration: 12.6, ease: "none" }, 48.6);
@@ -598,19 +617,26 @@
       tl.to("#flash", { opacity: 0, duration: 0.3, ease: "power2.out" }, 119.0);
       tl.fromTo("#flash", { opacity: 0 }, { opacity: 0.85, duration: 0.07, ease: "none", immediateRender: false }, 128.53);
       tl.to("#flash", { opacity: 0, duration: 0.3, ease: "power2.out" }, 128.6);
-      tl.fromTo("#subject-cam-momo", { scale: 1.18, yPercent: 4 }, { scale: 1.04, yPercent: 0, duration: 0.45, ease: "back.out(1.6)" }, 119.0);
-      tl.to("#subject-cam-momo", { scale: 1.12, duration: 9.15, ease: "sine.inOut" }, 119.45);
+      tl.fromTo("#subject-cam-momo", { scale: 1.25, rotation: 0 }, { scale: 1, rotation: -3, duration: 0.55, ease: "back.out(1.4)" }, 119.0);
+      tl.to("#subject-cam-momo", { scale: 1.04, rotation: 2, duration: 9.05, ease: "sine.inOut" }, 119.55);
       tl.fromTo("#bd-momo", { scale: 1.15 }, { scale: 1.0, duration: 9.6, ease: "power1.out" }, 119.0);
       tl.fromTo(["#row-momo-0", "#row-momo-2", "#row-momo-4"], { x: 0 }, { x: -1536, duration: 9.6, ease: "none" }, 119.0);
       tl.fromTo(["#row-momo-1", "#row-momo-3"], { x: -1836 }, { x: -300, duration: 9.6, ease: "none" }, 119.0);
       tl.set("#room-cam", { opacity: 0 }, 143.6);
       tl.fromTo("#flash", { opacity: 0 }, { opacity: 0.9, duration: 0.08, ease: "none", immediateRender: false }, 143.52);
       tl.to("#flash", { opacity: 0, duration: 0.3, ease: "power2.out" }, 143.6);
-      tl.fromTo("#subject-cam-outro", { scale: 1.18, yPercent: 4 }, { scale: 1.04, yPercent: 0, duration: 0.45, ease: "back.out(1.6)" }, 143.6);
-      tl.to("#subject-cam-outro", { scale: 1.12, duration: 4.45, ease: "sine.inOut" }, 144.05);
+      tl.fromTo("#subject-cam-outro", { scale: 1.25, rotation: 0 }, { scale: 1, rotation: -3, duration: 0.55, ease: "back.out(1.4)" }, 143.6);
+      tl.to("#subject-cam-outro", { scale: 1.04, rotation: 2, duration: 4.35, ease: "sine.inOut" }, 144.15);
       tl.fromTo("#bd-outro", { scale: 1.15 }, { scale: 1.0, duration: 4.9, ease: "power1.out" }, 143.6);
       tl.fromTo(["#row-outro-0", "#row-outro-2", "#row-outro-4"], { x: 0 }, { x: -784, duration: 4.9, ease: "none" }, 143.6);
       tl.fromTo(["#row-outro-1", "#row-outro-3"], { x: -1084 }, { x: -300, duration: 4.9, ease: "none" }, 143.6);
+
+      // Picture-in-picture cards are visible only inside their scene
+      tl.set("#subject-cam-thanks", { opacity: 1 }, 48.6);
+      tl.set("#subject-cam-thanks", { opacity: 0 }, 61.2);
+      tl.set("#subject-cam-momo", { opacity: 1 }, 119.0);
+      tl.set("#subject-cam-momo", { opacity: 0 }, 128.6);
+      tl.set("#subject-cam-outro", { opacity: 1 }, 143.6);
 
       // Subtitle pills
       slideUp("#sub-s1-t", 15.37);
