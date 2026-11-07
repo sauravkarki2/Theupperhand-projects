@@ -1,0 +1,7 @@
+# Claude SEO runtime (built by `claude-seo setup`)
+.venv/
+.venv.previous/
+.venv.*/
+runtime-state.json
+.runtime-state.next
+__pycache__/
